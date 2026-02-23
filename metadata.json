@@ -1,0 +1,5 @@
+{
+  "name": "Question Extractor",
+  "description": "Upload an image to extract questions and convert them to Markdown format.",
+  "requestFramePermissions": ["camera"]
+}
