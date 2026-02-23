@@ -29,12 +29,14 @@ const formatContent = (content: string) => {
 interface QuestionData {
   summary: string;
   question: string;
+  answer: string;
   explanation: string;
   precautions: string;
 }
 
 const MODELS = [
   { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro', desc: '最强推理，适合复杂题目' },
+  { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro', desc: '性能均衡，通用性强' },
   { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', desc: '速度最快，响应迅速' },
 ];
 
@@ -55,6 +57,7 @@ const TRANSLATIONS = {
     questionContent: '题干内容',
     copy: '复制题干',
     copied: '已复制',
+    answer: '答案',
     explanation: '讲解与分析',
     precautions: '注意事项',
     aiChat: 'AI 智能答疑',
@@ -82,6 +85,7 @@ const TRANSLATIONS = {
     questionContent: 'Question Text',
     copy: 'Copy Text',
     copied: 'Copied',
+    answer: 'Answer',
     explanation: 'Explanation & Analysis',
     precautions: 'Important Notes',
     aiChat: 'AI Tutor',
@@ -322,7 +326,7 @@ function QuestionDetail({
   const [copied, setCopied] = useState(false);
   const [touchStart, setTouchStart] = useState<{x: number, y: number} | null>(null);
   const [touchEnd, setTouchEnd] = useState<{x: number, y: number} | null>(null);
-  const [fullScreenPanel, setFullScreenPanel] = useState<'question' | 'explanation' | 'precautions' | null>(null);
+  const [fullScreenPanel, setFullScreenPanel] = useState<'question' | 'explanation' | 'precautions' | 'answer' | null>(null);
   const t = TRANSLATIONS[lang];
 
   const minSwipeDistance = 50;
@@ -356,16 +360,18 @@ function QuestionDetail({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const PanelHeader = ({ title, icon: Icon, type, showCopy }: { title: string, icon: any, type: 'question' | 'explanation' | 'precautions', showCopy?: boolean }) => (
+  const PanelHeader = ({ title, icon: Icon, type, showCopy }: { title: string, icon: any, type: 'question' | 'explanation' | 'precautions' | 'answer', showCopy?: boolean }) => (
     <div className="flex items-center justify-between px-5 py-2.5 border-b border-white/5 bg-white/5">
       <div className="flex items-center gap-2">
         <div className={`p-1.5 rounded-lg ring-1 ${
           type === 'question' ? 'bg-indigo-500/20 ring-indigo-500/30' : 
+          type === 'answer' ? 'bg-rose-500/20 ring-rose-500/30' :
           type === 'explanation' ? 'bg-emerald-500/20 ring-emerald-500/30' : 
           'bg-amber-500/20 ring-amber-500/30'
         }`}>
           <Icon className={`w-4 h-4 ${
             type === 'question' ? 'text-indigo-400' : 
+            type === 'answer' ? 'text-rose-400' :
             type === 'explanation' ? 'text-emerald-400' : 
             'text-amber-400'
           }`} />
@@ -462,6 +468,13 @@ function QuestionDetail({
         {QuestionContent(false)}
       </div>
 
+      <div className="bg-black/40 rounded-2xl border border-white/10 overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-3xl ring-1 ring-white/5">
+        <PanelHeader title={t.answer} icon={Check} type="answer" />
+        <div className="p-4 text-zinc-200 font-medium text-lg">
+          {data.answer}
+        </div>
+      </div>
+
       <div className="grid md:grid-cols-2 gap-3">
         <div className="bg-black/40 rounded-2xl border border-white/10 p-4 md:p-5 backdrop-blur-3xl ring-1 ring-white/5">
           <div className="flex items-center justify-between mb-3">
@@ -523,6 +536,27 @@ function QuestionDetail({
                   <PanelHeader title={t.questionContent} icon={BookOpen} type="question" showCopy />
                   {QuestionContent(true)}
                 </>
+              )}
+              {fullScreenPanel === 'answer' && (
+                <div className="p-6 flex flex-col h-full">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 bg-rose-500/20 rounded-lg ring-1 ring-rose-500/30">
+                        <Check className="w-4 h-4 text-rose-400" />
+                      </div>
+                      <h4 className="font-semibold text-sm text-white tracking-tight">{t.answer}</h4>
+                    </div>
+                    <button 
+                      onClick={() => setFullScreenPanel(null)}
+                      className="p-1.5 bg-white/10 border border-white/20 rounded-lg text-zinc-400 hover:text-white hover:bg-white/20 transition-all active:scale-95"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <div className="p-4 text-zinc-200 font-medium text-lg flex-1 overflow-y-auto">
+                    {data.answer}
+                  </div>
+                </div>
               )}
               {fullScreenPanel === 'explanation' && (
                 <div className="p-6 flex flex-col h-full">
@@ -645,7 +679,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [selectedModel, setSelectedModel] = useState('gemini-3-flash-preview');
+  const [selectedModel, setSelectedModel] = useState('gemini-3-pro-preview');
   const [language, setLanguage] = useState<'zh' | 'en'>('zh');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -714,15 +748,16 @@ export default function App() {
               text: `Analyze the provided image and extract all questions. For each question, provide:
 1. summary: A short summary.
 2. question: The full question text (题干). Use standard Markdown table syntax for tables.
-3. explanation: A detailed explanation and solution (讲解).
-4. precautions: Important notes, common pitfalls, or tips (注意事项).
+3. answer: The answer to the question (e.g., "A", "B", "C", "D" or the specific value).
+4. explanation: A detailed explanation and solution (讲解).
+5. precautions: Important notes, common pitfalls, or tips (注意事项).
 
 CRITICAL INSTRUCTIONS:
 - OUTPUT LANGUAGE: ${language === 'zh' ? 'Chinese' : 'English'}.
 - Use STRICT LaTeX for ALL math symbols, chemical formulas (e.g., $Cl_2$, $H_2O$, $Na^+$, $SO_4^{2-}$), units (e.g., $mol/L$, $g/cm^3$), and formatting.
 - **Wrap EVERY single math/formula/unit/equation in $ for inline or $$ for block math. This is MANDATORY for chemical equations like $2NO_2 \rightleftharpoons N_2O_4$.**
 - Example: Use $Cl_2$ instead of Cl2, use $1 \text{ mol}$ instead of 1mol, use $2H_2 + O_2 \rightarrow 2H_2O$ for equations.
-- Preserve the original layout in the "question" field. **For multiple-choice questions, ensure each option (A, B, C, D) starts on a NEW line.**
+- Preserve the original layout in the "question" field. **For multiple-choice questions, ensure each option (A, B, C, D) starts on a NEW line. This is CRITICAL.**
 - Return the result as a JSON array of objects.
 - Ensure all backslashes in LaTeX are properly escaped in the JSON string (e.g., "\\\\text" for \text).`,
             },
@@ -737,10 +772,11 @@ CRITICAL INSTRUCTIONS:
               properties: {
                 summary: { type: Type.STRING },
                 question: { type: Type.STRING },
+                answer: { type: Type.STRING },
                 explanation: { type: Type.STRING },
                 precautions: { type: Type.STRING },
               },
-              required: ['summary', 'question', 'explanation', 'precautions'],
+              required: ['summary', 'question', 'answer', 'explanation', 'precautions'],
             },
           },
         },
