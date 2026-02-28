@@ -5,8 +5,14 @@ import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import rehypeKatex from 'rehype-katex';
-import { Upload, Copy, Check, FileImage, Loader2, Trash2, AlertCircle, Camera, ArrowLeft, Info, BookOpen, ChevronRight, MessageCircle, Mic, Send, ChevronLeft, Maximize2, X } from 'lucide-react';
+import { Upload, Copy, Check, FileImage, Loader2, Trash2, AlertCircle, Camera, ArrowLeft, Info, BookOpen, ChevronRight, MessageCircle, Mic, Send, ChevronLeft, Maximize2, X, Book } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+
+import { MODELS, TRANSLATIONS } from './constants';
+import { AudioTutorView } from './components/AudioTutor';
+import { TextbookManager, Textbook } from './components/TextbookManager';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from './firebase';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -34,77 +40,13 @@ interface QuestionData {
   precautions: string;
 }
 
-const MODELS = [
-  { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro', desc: '最强推理，适合复杂题目' },
-  { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro', desc: '性能均衡，通用性强' },
-  { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', desc: '速度最快，响应迅速' },
-];
-
-const TRANSLATIONS = {
-  zh: {
-    title: '题目提取器',
-    subtitle: '智能识别题目，一键提取题干、详解与注意事项。',
-    upload: '上传图片',
-    camera: '拍照识别',
-    add: '添加',
-    clear: '清空',
-    start: '开始提取',
-    parsing: '解析中...',
-    selected: '已选',
-    preview: '识别预览',
-    ready: '题已就绪',
-    back: '返回列表',
-    questionContent: '题干内容',
-    copy: '复制题干',
-    copied: '已复制',
-    answer: '答案',
-    explanation: '讲解与分析',
-    precautions: '注意事项',
-    aiChat: 'AI 智能答疑',
-    askMe: '对这道题还有疑问？试试快速提问：',
-    placeholder: '输入你的问题，按 Enter 发送...',
-    thinking: 'AI 思考中...',
-    summaryAction: '总结考点',
-    exampleAction: '举个例子',
-    pitfallAction: '易错点提醒',
-    retry: '重试',
-  },
-  en: {
-    title: 'Question Extractor',
-    subtitle: 'Smartly identify questions, extract text, explanations, and tips with one click.',
-    upload: 'Upload Image',
-    camera: 'Camera Scan',
-    add: 'Add',
-    clear: 'Clear',
-    start: 'Extract Now',
-    parsing: 'Parsing...',
-    selected: 'Selected',
-    preview: 'Preview Results',
-    ready: 'questions ready',
-    back: 'Back to List',
-    questionContent: 'Question Text',
-    copy: 'Copy Text',
-    copied: 'Copied',
-    answer: 'Answer',
-    explanation: 'Explanation & Analysis',
-    precautions: 'Important Notes',
-    aiChat: 'AI Tutor',
-    askMe: 'Have questions? Try quick actions:',
-    placeholder: 'Type your question, press Enter...',
-    thinking: 'AI is thinking...',
-    summaryAction: 'Summarize Key Points',
-    exampleAction: 'Give an Example',
-    pitfallAction: 'Common Pitfalls',
-    retry: 'Retry',
-  }
-};
-
-function ChatBox({ data, model, setModel, lang }: { data: QuestionData, model: string, setModel: (m: string) => void, lang: 'zh' | 'en' }) {
+function ChatBox({ data, model, setModel, lang, textbooks }: { data: QuestionData, model: string, setModel: (m: string) => void, lang: 'zh' | 'en', textbooks: Textbook[] }) {
   const [messages, setMessages] = useState<{role: 'user' | 'model', text: string}[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [selectedChatTextbookIds, setSelectedChatTextbookIds] = useState<string[]>([]);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const t = TRANSLATIONS[lang];
 
@@ -112,6 +54,12 @@ function ChatBox({ data, model, setModel, lang }: { data: QuestionData, model: s
     setMessages([]);
     setInput('');
   }, [data.question]);
+
+  useEffect(() => {
+    if (textbooks.length > 0 && selectedChatTextbookIds.length === 0) {
+      setSelectedChatTextbookIds(textbooks.map(b => b.id));
+    }
+  }, [textbooks]);
 
   useEffect(() => {
     if (chatContainerRef.current) {
@@ -160,9 +108,34 @@ function ChatBox({ data, model, setModel, lang }: { data: QuestionData, model: s
         parts: [{ text: m.text }]
       }));
 
-      const systemInstruction = `You are a helpful AI tutor. The user is asking about the following question:\n\nQuestion:\n${data.question}\n\nExplanation:\n${data.explanation}\n\nPrecautions:\n${data.precautions}\n\nAnswer the user's questions based on this context in ${lang === 'zh' ? 'Chinese' : 'English'}. 
+      let textbookParts: any[] = [];
+      let textbookInstruction = "";
+      if (selectedChatTextbookIds && selectedChatTextbookIds.length > 0) {
+        for (const id of selectedChatTextbookIds) {
+          const book = textbooks.find(b => b.id === id);
+          if (book) {
+            try {
+              const response = await fetch(book.url);
+              if (!response.ok) throw new Error('Failed to fetch PDF');
+              const arrayBuffer = await response.arrayBuffer();
+              const base64 = btoa(
+                new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+              );
+              textbookParts.push({ inlineData: { data: base64, mimeType: 'application/pdf' } });
+            } catch (err) {
+              console.error("Failed to fetch textbook PDF", err);
+            }
+          }
+        }
+        if (textbookParts.length > 0) {
+          textbookInstruction = `\n\nCRITICAL: Textbook PDFs have been provided. You MUST use these textbooks to answer the user's question. When you use information from the textbooks, you MUST explicitly state the page number where the information is found (e.g., "According to page 45 of the textbook...").`;
+        }
+      }
+
+      const systemInstruction = `You are a helpful AI tutor. The user is asking about the following question:\n\nQuestion:\n${data.question}\n\nExplanation:\n${data.explanation}\n\nPrecautions:\n${data.precautions}\n\nAnswer the user's questions based on this context in ${lang === 'zh' ? 'Chinese' : 'English'}. ${textbookInstruction}
 
 CRITICAL INSTRUCTIONS:
+- You ONLY have access to the Question, Explanation, and Precautions text provided above, PLUS the textbook PDFs if provided.
 - Use STRICT LaTeX for ALL math symbols, chemical formulas (e.g., $Cl_2$, $H_2O$, $Na^+$, $SO_4^{2-}$), units (e.g., $mol/L$, $g/cm^3$), and formatting.
 - **Wrap EVERY single math/formula/unit/equation in $ for inline or $$ for block math. This is MANDATORY for chemical equations like $2NO_2 \rightleftharpoons N_2O_4$.**
 - Example: Use $Cl_2$ instead of Cl2, use $1 \text{ mol}$ instead of 1mol, use $2H_2 + O_2 \rightarrow 2H_2O$ for equations.
@@ -170,12 +143,19 @@ CRITICAL INSTRUCTIONS:
 - Be concise and professional.
 - Ensure all backslashes in LaTeX are properly escaped if you are returning JSON (though here you are returning raw text, still be careful with escape characters).`;
 
+      const contents: any[] = [...history];
+      
+      const userParts: any[] = [];
+      if (textbookParts.length > 0) {
+        userParts.push(...textbookParts);
+      }
+      userParts.push({ text: messageToSend });
+      
+      contents.push({ role: 'user', parts: userParts });
+
       const response = await ai.models.generateContent({
         model: model,
-        contents: [
-          ...history,
-          { role: 'user', parts: [{ text: messageToSend }] }
-        ],
+        contents: contents,
         config: {
           systemInstruction,
         }
@@ -207,6 +187,38 @@ CRITICAL INSTRUCTIONS:
           <h4 className="font-semibold text-sm text-white tracking-tight">{t.aiChat}</h4>
         </div>
         <div className="flex items-center gap-2">
+          {textbooks.length > 0 && (
+            <div className="relative group/dropdown">
+              <button className="bg-zinc-900/80 border border-zinc-700 text-zinc-300 text-[10px] rounded-md px-2 py-1 outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer backdrop-blur-md max-w-[120px] truncate flex items-center gap-1">
+                <Book className="w-3 h-3" />
+                {selectedChatTextbookIds.length === 0 
+                  ? (lang === 'zh' ? '不关联教材' : 'No textbook') 
+                  : (lang === 'zh' ? `已关联 ${selectedChatTextbookIds.length} 本教材` : `${selectedChatTextbookIds.length} textbooks`)}
+              </button>
+              <div className="absolute right-0 top-full mt-1 w-48 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl opacity-0 invisible group-hover/dropdown:opacity-100 group-hover/dropdown:visible transition-all z-50 p-2 flex flex-col gap-1 max-h-48 overflow-y-auto custom-scrollbar">
+                {textbooks.map(book => {
+                  const isSelected = selectedChatTextbookIds.includes(book.id);
+                  return (
+                    <button
+                      key={book.id}
+                      onClick={() => {
+                        if (isSelected) {
+                          setSelectedChatTextbookIds(prev => prev.filter(id => id !== book.id));
+                        } else {
+                          setSelectedChatTextbookIds(prev => [...prev, book.id]);
+                        }
+                      }}
+                      className={`text-left px-2 py-1.5 text-xs rounded-md transition-colors ${
+                        isSelected ? 'bg-indigo-500/20 text-indigo-300' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+                      }`}
+                    >
+                      <div className="truncate">{book.name}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <select 
             value={model} 
             onChange={e => setModel(e.target.value)}
@@ -319,9 +331,9 @@ CRITICAL INSTRUCTIONS:
 }
 
 function QuestionDetail({ 
-  data, onBack, onNext, onPrev, hasNext, hasPrev, model, setModel, lang 
+  data, onBack, onNext, onPrev, hasNext, hasPrev, model, setModel, lang, textbooks 
 }: { 
-  data: QuestionData; onBack: () => void; onNext: () => void; onPrev: () => void; hasNext: boolean; hasPrev: boolean; model: string; setModel: (m: string) => void; lang: 'zh' | 'en';
+  data: QuestionData; onBack: () => void; onNext: () => void; onPrev: () => void; hasNext: boolean; hasPrev: boolean; model: string; setModel: (m: string) => void; lang: 'zh' | 'en'; textbooks: Textbook[];
 }) {
   const [copied, setCopied] = useState(false);
   const [touchStart, setTouchStart] = useState<{x: number, y: number} | null>(null);
@@ -515,7 +527,7 @@ function QuestionDetail({
         </div>
       </div>
       
-      <ChatBox data={data} model={model} setModel={setModel} lang={lang} />
+      <ChatBox data={data} model={model} setModel={setModel} lang={lang} textbooks={textbooks} />
 
       <AnimatePresence>
         {fullScreenPanel && (
@@ -672,6 +684,7 @@ function BackgroundLines() {
 }
 
 export default function App() {
+  const [appMode, setAppMode] = useState<'extractor' | 'audio-tutor'>('extractor');
   const [files, setFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [questions, setQuestions] = useState<QuestionData[]>([]);
@@ -683,7 +696,39 @@ export default function App() {
   const [language, setLanguage] = useState<'zh' | 'en'>('zh');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  
+  const [showTextbookManager, setShowTextbookManager] = useState(false);
+  const [textbooks, setTextbooks] = useState<Textbook[]>([]);
+  const [selectedTextbookIds, setSelectedTextbookIds] = useState<string[]>([]);
+  const [associateTextbook, setAssociateTextbook] = useState(false);
+
   const t = TRANSLATIONS[language];
+
+  useEffect(() => {
+    if (db) {
+      loadTextbooks();
+    }
+  }, [showTextbookManager]);
+
+  const loadTextbooks = async () => {
+    if (!db) return;
+    try {
+      const querySnapshot = await getDocs(collection(db, 'textbooks'));
+      const books: Textbook[] = [];
+      querySnapshot.forEach((doc) => {
+        books.push({ id: doc.id, ...doc.data() } as Textbook);
+      });
+      const sortedBooks = books.sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis());
+      setTextbooks(sortedBooks);
+      
+      // Select all by default if nothing is selected
+      if (selectedTextbookIds.length === 0 && sortedBooks.length > 0) {
+        setSelectedTextbookIds(sortedBooks.map(b => b.id));
+      }
+    } catch (err) {
+      console.error("Failed to load textbooks", err);
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -739,13 +784,10 @@ export default function App() {
         return { inlineData: { data: base64Data, mimeType: f.type } };
       }));
 
-      const response = await ai.models.generateContent({
-        model: selectedModel,
-        contents: {
-          parts: [
-            ...imageParts,
-            {
-              text: `Analyze the provided image and extract all questions. For each question, provide:
+      const parts: any[] = [...imageParts];
+
+      parts.push({
+        text: `Analyze the provided image and extract all questions. For each question, provide:
 1. summary: A short summary.
 2. question: The full question text (题干). Use standard Markdown table syntax for tables.
 3. answer: The answer to the question (e.g., "A", "B", "C", "D" or the specific value).
@@ -760,8 +802,12 @@ CRITICAL INSTRUCTIONS:
 - Preserve the original layout in the "question" field. **For multiple-choice questions, ensure each option (A, B, C, D) starts on a NEW line. This is CRITICAL.**
 - Return the result as a JSON array of objects.
 - Ensure all backslashes in LaTeX are properly escaped in the JSON string (e.g., "\\\\text" for \text).`,
-            },
-          ],
+      });
+
+      const response = await ai.models.generateContent({
+        model: selectedModel,
+        contents: {
+          parts: parts,
         },
         config: {
           responseMimeType: 'application/json',
@@ -831,7 +877,109 @@ CRITICAL INSTRUCTIONS:
         </header>
 
         <main className="space-y-6">
-          {selectedIdx === null ? (
+          <div className="flex justify-center mb-6">
+            <div className="bg-black/40 p-1 rounded-xl border border-white/10 flex gap-1 backdrop-blur-md shadow-lg">
+              <button
+                onClick={() => setAppMode('extractor')}
+                className={`px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${appMode === 'extractor' ? 'bg-indigo-600 text-white shadow-[0_0_15px_rgba(99,102,241,0.4)]' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
+              >
+                {t.extractorMode}
+              </button>
+              <button
+                onClick={() => setAppMode('audio-tutor')}
+                className={`px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${appMode === 'audio-tutor' ? 'bg-indigo-600 text-white shadow-[0_0_15px_rgba(99,102,241,0.4)]' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
+              >
+                {t.audioTutorMode}
+              </button>
+            </div>
+          </div>
+
+          {/* Model Selection */}
+          <div className="flex flex-wrap md:flex-nowrap gap-2 bg-black/40 p-2 rounded-2xl border border-white/10 backdrop-blur-2xl shadow-lg">
+            {MODELS.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => setSelectedModel(m.id)}
+                className={`flex-1 min-w-[90px] p-2.5 rounded-xl border text-center transition-all duration-300 backdrop-blur-md ${
+                  selectedModel === m.id 
+                    ? 'bg-white/90 border-white text-black shadow-[0_0_15px_rgba(255,255,255,0.2)]' 
+                    : 'bg-black/40 border-white/10 text-zinc-400 hover:border-white/30 hover:bg-black/60'
+                }`}
+              >
+                <div className="font-bold text-xs truncate">{m.name}</div>
+              </button>
+            ))}
+          </div>
+
+          {/* Textbook Association Section */}
+          <div className="flex items-center justify-between bg-black/40 p-4 rounded-2xl border border-white/10 backdrop-blur-2xl shadow-lg">
+            <div className="flex items-center gap-4">
+              {appMode === 'audio-tutor' && (
+                <>
+                  <label className="flex items-center gap-2 cursor-pointer group">
+                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${associateTextbook ? 'bg-indigo-500 border-indigo-500' : 'border-white/20 group-hover:border-indigo-400'}`}>
+                      {associateTextbook && <Check className="w-3.5 h-3.5 text-white" />}
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      className="hidden" 
+                      checked={associateTextbook} 
+                      onChange={(e) => setAssociateTextbook(e.target.checked)} 
+                    />
+                    <span className="text-sm font-medium text-zinc-200 group-hover:text-white transition-colors">
+                      {t.associateTextbook}
+                    </span>
+                  </label>
+                  
+                  {associateTextbook && (
+                    <div className="flex flex-wrap gap-2 mt-2 md:mt-0">
+                      {textbooks.map(book => {
+                        const isSelected = selectedTextbookIds.includes(book.id);
+                        return (
+                          <button
+                            key={book.id}
+                            onClick={() => {
+                              if (isSelected) {
+                                setSelectedTextbookIds(prev => prev.filter(id => id !== book.id));
+                              } else {
+                                setSelectedTextbookIds(prev => [...prev, book.id]);
+                              }
+                            }}
+                            className={`px-3 py-1 text-xs font-medium rounded-full border transition-all ${
+                              isSelected 
+                                ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-300' 
+                                : 'bg-white/5 border-white/10 text-zinc-400 hover:bg-white/10'
+                            }`}
+                          >
+                            {book.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            
+            <button 
+              onClick={() => setShowTextbookManager(true)}
+              className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm text-zinc-300 transition-colors"
+            >
+              <Book className="w-4 h-4" />
+              {t.manageTextbooks}
+            </button>
+          </div>
+
+          {appMode === 'audio-tutor' ? (
+            <AudioTutorView 
+              files={files} 
+              setFiles={setFiles} 
+              lang={language} 
+              associateTextbook={associateTextbook}
+              selectedTextbookIds={selectedTextbookIds}
+              textbooks={textbooks}
+            />
+          ) : selectedIdx === null ? (
             <>
               {/* Model & Upload Section */}
               <div className="bg-black/40 p-1 rounded-2xl border border-white/10 backdrop-blur-2xl shadow-2xl">
@@ -840,25 +988,6 @@ CRITICAL INSTRUCTIONS:
                   {/* Hidden Inputs */}
                   <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" multiple className="hidden" />
                   <input type="file" ref={cameraInputRef} onChange={handleFileChange} accept="image/*" capture="environment" multiple className="hidden" />
-
-                  {/* Model Selection */}
-                  {files.length === 0 && (
-                    <div className="flex flex-wrap md:flex-nowrap gap-1">
-                      {MODELS.map((m) => (
-                        <button
-                          key={m.id}
-                          onClick={() => setSelectedModel(m.id)}
-                          className={`flex-1 min-w-[90px] p-2 rounded-md border text-left transition-all duration-300 backdrop-blur-md ${
-                            selectedModel === m.id 
-                              ? 'bg-white/90 border-white text-black shadow-[0_0_10px_rgba(255,255,255,0.2)]' 
-                              : 'bg-black/40 border-white/10 text-zinc-400 hover:border-white/30 hover:bg-black/60'
-                          }`}
-                        >
-                          <div className="font-bold text-[9px] truncate">{m.name}</div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
 
                   {files.length === 0 ? (
                     <div className="flex flex-col md:flex-row gap-2">
@@ -995,10 +1124,15 @@ CRITICAL INSTRUCTIONS:
               model={selectedModel}
               setModel={setSelectedModel}
               lang={language}
+              textbooks={textbooks}
             />
           )}
         </main>
       </div>
+
+      {showTextbookManager && (
+        <TextbookManager onClose={() => setShowTextbookManager(false)} lang={language} />
+      )}
     </div>
   );
 }
