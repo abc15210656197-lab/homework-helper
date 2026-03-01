@@ -911,20 +911,22 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (db) {
-      loadTextbooks();
-    }
+    loadTextbooks();
   }, [showTextbookManager]);
 
   const loadTextbooks = async () => {
-    if (!db) return;
     try {
+      if (!db) throw new Error('Firebase not configured');
       const querySnapshot = await getDocs(collection(db, 'textbooks'));
       const books: Textbook[] = [];
       querySnapshot.forEach((doc) => {
         books.push({ id: doc.id, ...doc.data() } as Textbook);
       });
-      const sortedBooks = books.sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis());
+      const sortedBooks = books.sort((a, b) => {
+        const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : (a.createdAt || 0));
+        const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : (b.createdAt || 0));
+        return bTime - aTime;
+      });
       setTextbooks(sortedBooks);
       
       // Select all by default if nothing is selected
@@ -932,7 +934,22 @@ export default function App() {
         setSelectedTextbookIds(sortedBooks.map(b => b.id));
       }
     } catch (err) {
-      console.error("Failed to load textbooks", err);
+      console.warn("Firebase error in App.tsx, falling back to localStorage:", err);
+      const localBooks = localStorage.getItem('textbooks');
+      if (localBooks) {
+        try {
+          const parsed = JSON.parse(localBooks);
+          const sortedBooks = parsed.sort((a: any, b: any) => (b.createdAt?.seconds || b.createdAt || 0) - (a.createdAt?.seconds || a.createdAt || 0));
+          setTextbooks(sortedBooks);
+          if (selectedTextbookIds.length === 0 && sortedBooks.length > 0) {
+            setSelectedTextbookIds(sortedBooks.map((b: any) => b.id));
+          }
+        } catch (e) {
+          setTextbooks([]);
+        }
+      } else {
+        setTextbooks([]);
+      }
     }
   };
 

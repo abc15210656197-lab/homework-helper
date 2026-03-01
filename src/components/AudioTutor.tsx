@@ -300,36 +300,48 @@ export function AudioTutorView({
       }
 
       parts.push({ text: lang === 'zh' ? `请分析提供的图片。其中包含一个或多个作业题目。
-      1. 提供内容的简要总体总结。
+      1. 提供内容的简要总体总结。这部分用作开场白，语气要像老师刚看到题目时对学生说的话（例如：“同学们，我们来看看这道题...”）。
       2. 识别每个单独的问题并为每个问题提供详细解释。
+      
+      【重要要求：讲题语气】
+      - 绝对不要像干巴巴的参考答案或解析！
+      - 必须使用口语化、生动、循循善诱的老师讲课语气。
+      - 多用互动词汇，例如“大家注意看这里”、“你想想看为什么”、“我们一步步来推导”等。
+      - 引导学生思考，分析题目考察的知识点，然后再给出结论。
       
       请使用中文 (Chinese) 回答。
       
       以 JSON 格式返回结果：
       {
-        "overallExplanation": "简要总结...",
+        "overallExplanation": "口语化的开场白和总体总结...",
         "questions": [
           {
             "id": "q1",
             "title": "问题 1",
-            "explanation": "问题 1 的详细解释..."
+            "explanation": "口语化的、循循善诱的详细讲解过程..."
           },
           ...
         ]
       }` : `Please analyze the provided image. It contains one or more homework questions. 
-      1. Provide a brief overall summary of the content.
+      1. Provide a brief overall summary of the content. This should act as an opening hook, sounding like a teacher introducing the problem to a student (e.g., "Alright, let's take a look at this problem...").
       2. Identify each individual question and provide a detailed explanation for each.
+      
+      [IMPORTANT: TUTORING TONE]
+      - DO NOT sound like a dry answer key or textbook solution!
+      - You MUST use a conversational, engaging, and step-by-step tutoring tone.
+      - Use interactive phrases like "Notice how...", "Think about why...", "Let's break this down step-by-step".
+      - Guide the student's thinking, analyze the concepts being tested, and then arrive at the conclusion.
       
       Please respond in English.
 
       Return the result in JSON format:
       {
-        "overallExplanation": "Brief summary...",
+        "overallExplanation": "Conversational opening and summary...",
         "questions": [
           {
             "id": "q1",
             "title": "Question 1",
-            "explanation": "Detailed explanation for question 1..."
+            "explanation": "Conversational, step-by-step tutoring explanation..."
           },
           ...
         ]
@@ -343,7 +355,7 @@ export function AudioTutorView({
           }
         ],
         config: {
-          systemInstruction: `You are a professional tutor. Analyze the homework image and provide explanations. 
+          systemInstruction: `You are an experienced, friendly, and engaging tutor. Your task is to explain problems to a student, not just provide an answer key. Use a conversational, spoken-language style, as if you are sitting right next to the student tutoring them.
           CRITICAL: You MUST respond in ${lang === 'zh' ? 'Chinese (Simplified)' : 'English'}. 
           All explanations, summaries, and titles must be in ${lang === 'zh' ? 'Chinese' : 'English'}.`,
           responseMimeType: 'application/json',

@@ -10,6 +10,8 @@ const firebaseConfig = {
   appId: (import.meta as any).env.VITE_FIREBASE_APP_ID
 };
 
+const databaseId = 'textbook';
+
 let app;
 let db: ReturnType<typeof getFirestore> | null = null;
 let storage: ReturnType<typeof getStorage> | null = null;
@@ -17,7 +19,7 @@ let storage: ReturnType<typeof getStorage> | null = null;
 if (firebaseConfig.apiKey) {
   app = initializeApp(firebaseConfig);
   // Use initializeFirestore with experimentalForceLongPolling to improve proxy compatibility
-  db = initializeFirestore(app, { experimentalForceLongPolling: true });
+  db = initializeFirestore(app, { experimentalForceLongPolling: true }, databaseId);
   
   if (firebaseConfig.storageBucket) {
     storage = getStorage(app);

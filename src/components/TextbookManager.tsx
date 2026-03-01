@@ -22,27 +22,42 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
   const [urlNameInput, setUrlNameInput] = useState('');
 
   useEffect(() => {
-    if (!db) {
-      setError(lang === 'zh' ? 'Firebase 未配置。请在环境变量中配置 Firebase。' : 'Firebase is not configured. Please configure Firebase in environment variables.');
-      setLoading(false);
-      return;
-    }
     loadTextbooks();
   }, []);
 
   const loadTextbooks = async () => {
-    if (!db) return;
     try {
+      if (!db) throw new Error('Firebase not configured');
       const querySnapshot = await getDocs(collection(db, 'textbooks'));
       const books: Textbook[] = [];
       querySnapshot.forEach((doc) => {
         books.push({ id: doc.id, ...doc.data() } as Textbook);
       });
-      setTextbooks(books.sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis()));
+      setTextbooks(books.sort((a, b) => {
+        const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : (a.createdAt || 0));
+        const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : (b.createdAt || 0));
+        return bTime - aTime;
+      }));
     } catch (err: any) {
-      if (err.message === 'Failed to fetch') {
-        setError(lang === 'zh' ? '网络请求失败。请检查您的网络连接，或确保代理软件已开启全局模式（Firebase 在国内无法直接访问）。' : 'Network request failed. Please check your connection or proxy settings.');
+      console.warn("Firebase error, falling back to localStorage:", err);
+      const localBooks = localStorage.getItem('textbooks');
+      if (localBooks) {
+        try {
+          const parsed = JSON.parse(localBooks);
+          // Sort local books by simulated createdAt
+          setTextbooks(parsed.sort((a: any, b: any) => (b.createdAt?.seconds || b.createdAt || 0) - (a.createdAt?.seconds || a.createdAt || 0)));
+        } catch (e) {
+          setTextbooks([]);
+        }
       } else {
+        setTextbooks([]);
+      }
+      
+      if (err.message === 'Failed to fetch') {
+        setError(lang === 'zh' ? '网络请求失败。正在使用本地存储模式。' : 'Network request failed. Using local storage mode.');
+      } else if (err.message.includes('Database')) {
+        // Don't show error for missing database, just silently use local storage
+      } else if (err.message !== 'Firebase not configured') {
         setError(err.message);
       }
     } finally {
@@ -52,7 +67,7 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !db) return;
+    if (!file) return;
 
     if (file.type !== 'application/pdf') {
       setError(lang === 'zh' ? '只能上传 PDF 文件。' : 'Only PDF files are allowed.');
@@ -85,17 +100,32 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
         .from('textbooks')
         .getPublicUrl(fileId);
 
-      await addDoc(collection(db, 'textbooks'), {
-        name: file.name,
-        url: publicUrl,
-        fileId: `supabase-${fileId}`,
-        createdAt: serverTimestamp()
-      });
+      try {
+        if (!db) throw new Error('Firebase not configured');
+        await addDoc(collection(db, 'textbooks'), {
+          name: file.name,
+          url: publicUrl,
+          fileId: `supabase-${fileId}`,
+          createdAt: serverTimestamp()
+        });
+      } catch (dbErr) {
+        console.warn("Firebase save failed, saving to localStorage:", dbErr);
+        const newBook = {
+          id: `local-${Date.now()}`,
+          name: file.name,
+          url: publicUrl,
+          fileId: `supabase-${fileId}`,
+          createdAt: Date.now()
+        };
+        const localBooks = JSON.parse(localStorage.getItem('textbooks') || '[]');
+        localBooks.push(newBook);
+        localStorage.setItem('textbooks', JSON.stringify(localBooks));
+      }
 
       await loadTextbooks();
     } catch (err: any) {
       if (err.message === 'Failed to fetch') {
-        setError(lang === 'zh' ? '网络请求失败。请检查您的网络连接，或确保代理软件已开启全局模式（Firebase 在国内无法直接访问）。' : 'Network request failed. Please check your connection or proxy settings.');
+        setError(lang === 'zh' ? '网络请求失败。请检查您的网络连接。' : 'Network request failed. Please check your connection.');
       } else {
         setError(err.message);
       }
@@ -105,7 +135,7 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
   };
 
   const handleAddUrl = async () => {
-    if (!urlInput.trim() || !urlNameInput.trim() || !db) {
+    if (!urlInput.trim() || !urlNameInput.trim()) {
       setError(lang === 'zh' ? '请填写教材名称和链接。' : 'Please provide both name and URL.');
       return;
     }
@@ -114,12 +144,27 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
     setError(null);
 
     try {
-      await addDoc(collection(db, 'textbooks'), {
-        name: urlNameInput.trim() + (urlNameInput.toLowerCase().endsWith('.pdf') ? '' : '.pdf'),
-        url: urlInput.trim(),
-        fileId: 'url-' + Date.now(),
-        createdAt: serverTimestamp()
-      });
+      try {
+        if (!db) throw new Error('Firebase not configured');
+        await addDoc(collection(db, 'textbooks'), {
+          name: urlNameInput.trim() + (urlNameInput.toLowerCase().endsWith('.pdf') ? '' : '.pdf'),
+          url: urlInput.trim(),
+          fileId: 'url-' + Date.now(),
+          createdAt: serverTimestamp()
+        });
+      } catch (dbErr) {
+        console.warn("Firebase save failed, saving to localStorage:", dbErr);
+        const newBook = {
+          id: `local-${Date.now()}`,
+          name: urlNameInput.trim() + (urlNameInput.toLowerCase().endsWith('.pdf') ? '' : '.pdf'),
+          url: urlInput.trim(),
+          fileId: 'url-' + Date.now(),
+          createdAt: Date.now()
+        };
+        const localBooks = JSON.parse(localStorage.getItem('textbooks') || '[]');
+        localBooks.push(newBook);
+        localStorage.setItem('textbooks', JSON.stringify(localBooks));
+      }
 
       setUrlInput('');
       setUrlNameInput('');
@@ -132,8 +177,6 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
   };
 
   const handleDelete = async (book: Textbook) => {
-    if (!db) return;
-    
     try {
       if (supabase && book.fileId && book.fileId.startsWith('supabase-')) {
         const actualFileId = book.fileId.replace('supabase-', '');
@@ -146,7 +189,24 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
         }
       }
       
-      await deleteDoc(doc(db, 'textbooks', book.id));
+      if (book.id.startsWith('local-')) {
+        const localBooks = JSON.parse(localStorage.getItem('textbooks') || '[]');
+        const updatedBooks = localBooks.filter((b: any) => b.id !== book.id);
+        localStorage.setItem('textbooks', JSON.stringify(updatedBooks));
+      } else {
+        if (db) {
+          try {
+            await deleteDoc(doc(db, 'textbooks', book.id));
+          } catch (e) {
+            console.warn("Firebase delete failed:", e);
+          }
+        }
+        // Also try to remove from localStorage just in case it was an old local book without the prefix
+        const localBooks = JSON.parse(localStorage.getItem('textbooks') || '[]');
+        const updatedBooks = localBooks.filter((b: any) => b.id !== book.id);
+        localStorage.setItem('textbooks', JSON.stringify(updatedBooks));
+      }
+      
       setTextbooks(textbooks.filter(b => b.id !== book.id));
     } catch (err: any) {
       setError(err.message);
@@ -211,7 +271,7 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
                       : 'If the file exceeds 50MB, upload it directly in the Supabase console and use "Import URL".'}
                   </span>
                 </div>
-                <input type="file" accept="application/pdf" className="hidden" onChange={handleUpload} disabled={uploading || !db} />
+                <input type="file" accept="application/pdf" className="hidden" onChange={handleUpload} disabled={uploading} />
               </label>
             ) : (
               <div className="space-y-4 p-5 border border-white/10 rounded-xl bg-white/5 liquid-panel">
