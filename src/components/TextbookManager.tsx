@@ -155,10 +155,10 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
 
   return (
     <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[80vh]">
+      <div className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[80vh] liquid-panel-strong">
         <div className="flex items-center justify-between p-6 border-b border-white/10">
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <Book className="w-5 h-5 text-indigo-400" />
+            <Book className="w-5 h-5 text-white" />
             {lang === 'zh' ? '教材管理' : 'Manage Textbooks'}
           </h2>
           <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg text-zinc-400 transition-colors">
@@ -178,14 +178,14 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
             <div className="flex items-center gap-2 mb-4 p-1 bg-white/5 rounded-lg w-fit">
               <button
                 onClick={() => setUploadMode('file')}
-                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${uploadMode === 'file' ? 'bg-indigo-500 text-white shadow-md' : 'text-zinc-400 hover:text-white'}`}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${uploadMode === 'file' ? 'bg-white text-black shadow-[0_0_15px_rgba(255,255,255,0.4)]' : 'text-zinc-400 hover:text-white'}`}
               >
                 <FileText className="w-4 h-4" />
                 {lang === 'zh' ? '本地上传' : 'Local File'}
               </button>
               <button
                 onClick={() => setUploadMode('url')}
-                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${uploadMode === 'url' ? 'bg-indigo-500 text-white shadow-md' : 'text-zinc-400 hover:text-white'}`}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${uploadMode === 'url' ? 'bg-white text-black shadow-[0_0_15px_rgba(255,255,255,0.4)]' : 'text-zinc-400 hover:text-white'}`}
               >
                 <LinkIcon className="w-4 h-4" />
                 {lang === 'zh' ? '链接导入 / Supabase 导入' : 'Import URL / Supabase'}
@@ -193,8 +193,8 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
             </div>
 
             {uploadMode === 'file' ? (
-              <label className="flex items-center justify-center w-full p-8 border-2 border-dashed border-white/20 rounded-xl hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-all cursor-pointer group">
-                <div className="flex flex-col items-center gap-2 text-zinc-400 group-hover:text-indigo-400">
+              <label className="flex items-center justify-center w-full p-8 border-2 border-dashed border-white/20 rounded-xl hover:border-white/50 hover:bg-white/5 transition-all cursor-pointer group liquid-panel">
+                <div className="flex flex-col items-center gap-2 text-zinc-400 group-hover:text-white">
                   {uploading ? (
                     <Loader2 className="w-8 h-8 animate-spin" />
                   ) : (
@@ -214,8 +214,8 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
                 <input type="file" accept="application/pdf" className="hidden" onChange={handleUpload} disabled={uploading || !db} />
               </label>
             ) : (
-              <div className="space-y-4 p-5 border border-white/10 rounded-xl bg-white/5">
-                <div className="text-xs text-zinc-400 bg-zinc-900/50 p-3 rounded-lg border border-white/5 mb-2">
+              <div className="space-y-4 p-5 border border-white/10 rounded-xl bg-white/5 liquid-panel">
+                <div className="text-xs text-zinc-400 bg-zinc-900/50 p-3 rounded-lg border border-white/5 mb-2 liquid-panel">
                   {lang === 'zh' 
                     ? '你可以直接在 Supabase 控制台的 Storage 中上传超大文件。上传后点击文件，选择 "Get URL"，然后将链接粘贴到下方。' 
                     : 'You can upload large files directly in Supabase Storage console. Click the file, select "Get URL", and paste it below.'}
@@ -224,26 +224,26 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
                   <label className="block text-xs font-medium text-zinc-400 mb-1.5">{lang === 'zh' ? '教材名称' : 'Textbook Name'}</label>
                   <input 
                     type="text" 
-                    value={urlNameInput}
+                    value={urlNameInput || ''}
                     onChange={e => setUrlNameInput(e.target.value)}
                     placeholder={lang === 'zh' ? '例如：高等数学上册' : 'e.g. Calculus Vol 1'}
-                    className="w-full bg-zinc-900/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                    className="w-full bg-zinc-900/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-white/50 transition-colors"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-zinc-400 mb-1.5">{lang === 'zh' ? 'PDF 直链地址' : 'Direct PDF URL'}</label>
                   <input 
                     type="url" 
-                    value={urlInput}
+                    value={urlInput || ''}
                     onChange={e => setUrlInput(e.target.value)}
                     placeholder="https://example.com/book.pdf"
-                    className="w-full bg-zinc-900/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                    className="w-full bg-zinc-900/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-white/50 transition-colors"
                   />
                 </div>
                 <button 
                   onClick={handleAddUrl}
                   disabled={uploading || !urlInput.trim() || !urlNameInput.trim()}
-                  className="w-full py-2 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                  className="w-full py-2 bg-white hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed text-black text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(255,255,255,0.4)] active:scale-95"
                 >
                   {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LinkIcon className="w-4 h-4" />}
                   {lang === 'zh' ? '添加链接' : 'Add URL'}
@@ -258,7 +258,7 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
             </h3>
             {loading ? (
               <div className="flex justify-center py-8">
-                <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
+                <Loader2 className="w-6 h-6 text-white animate-spin" />
               </div>
             ) : textbooks.length === 0 ? (
               <div className="text-center py-8 text-zinc-500 text-sm">
@@ -266,9 +266,9 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
               </div>
             ) : (
               textbooks.map(book => (
-                <div key={book.id} className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors">
+                <div key={book.id} className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors liquid-panel">
                   <div className="flex items-center gap-3 overflow-hidden">
-                    <Book className="w-5 h-5 text-indigo-400 shrink-0" />
+                    <Book className="w-5 h-5 text-white shrink-0" />
                     <span className="text-sm font-medium text-zinc-200 truncate">{book.name}</span>
                   </div>
                   <button 

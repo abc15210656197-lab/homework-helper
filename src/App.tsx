@@ -5,14 +5,21 @@ import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import rehypeKatex from 'rehype-katex';
-import { Upload, Copy, Check, FileImage, Loader2, Trash2, AlertCircle, Camera, ArrowLeft, Info, BookOpen, ChevronRight, MessageCircle, Mic, Send, ChevronLeft, Maximize2, X, Book } from 'lucide-react';
+import { Upload, Copy, Check, FileImage, Loader2, Trash2, AlertCircle, Camera, ArrowLeft, Info, BookOpen, ChevronRight, MessageCircle, Mic, Send, ChevronLeft, Maximize2, X, Book, FileText, Headphones, LineChart, Plus, Edit2, Palette, Globe, Keyboard, Image as ImageIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { InlineMath } from 'react-katex';
+import 'katex/dist/katex.min.css';
 
 import { MODELS, TRANSLATIONS } from './constants';
 import { AudioTutorView } from './components/AudioTutor';
 import { TextbookManager, Textbook } from './components/TextbookManager';
+import { ReadingCoach } from './components/ReadingCoach';
+import GraphView from './components/GraphView';
+import MathKeyboard from './components/MathKeyboard';
+import { extractFunctionsFromImage } from './services/graphService';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from './firebase';
+import * as math from 'mathjs';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -181,15 +188,15 @@ CRITICAL INSTRUCTIONS:
     <div className={`flex flex-col ${isFullScreen ? 'h-full' : ''}`}>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 bg-indigo-500/20 rounded-lg ring-1 ring-indigo-500/30">
-            <MessageCircle className="w-4 h-4 text-indigo-400" />
+          <div className="p-1.5 bg-white/10 rounded-lg ring-1 ring-white/20">
+            <MessageCircle className="w-4 h-4 text-white" />
           </div>
           <h4 className="font-semibold text-sm text-white tracking-tight">{t.aiChat}</h4>
         </div>
         <div className="flex items-center gap-2">
           {textbooks.length > 0 && (
             <div className="relative group/dropdown">
-              <button className="bg-zinc-900/80 border border-zinc-700 text-zinc-300 text-[10px] rounded-md px-2 py-1 outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer backdrop-blur-md max-w-[120px] truncate flex items-center gap-1">
+              <button className="bg-black/40 hover:bg-white/5 border border-white/10 text-zinc-300 text-[10px] rounded-full px-3 py-1.5 outline-none focus:ring-1 focus:ring-white cursor-pointer backdrop-blur-md max-w-[140px] truncate flex items-center gap-1.5 transition-all">
                 <Book className="w-3 h-3" />
                 {selectedChatTextbookIds.length === 0 
                   ? (lang === 'zh' ? '不关联教材' : 'No textbook') 
@@ -209,7 +216,7 @@ CRITICAL INSTRUCTIONS:
                         }
                       }}
                       className={`text-left px-2 py-1.5 text-xs rounded-md transition-colors ${
-                        isSelected ? 'bg-indigo-500/20 text-indigo-300' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+                        isSelected ? 'bg-white text-black shadow-[0_0_10px_rgba(255,255,255,0.3)]' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
                       }`}
                     >
                       <div className="truncate">{book.name}</div>
@@ -220,15 +227,15 @@ CRITICAL INSTRUCTIONS:
             </div>
           )}
           <select 
-            value={model} 
+            value={model || ''} 
             onChange={e => setModel(e.target.value)}
-            className="bg-zinc-900/80 border border-zinc-700 text-zinc-300 text-[10px] rounded-md px-1.5 py-1 outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer backdrop-blur-md"
+            className="bg-black/40 hover:bg-white/5 border border-white/10 text-zinc-300 text-[10px] rounded-full px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-white cursor-pointer backdrop-blur-md appearance-none text-center min-w-[80px]"
           >
             {MODELS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
           <button 
             onClick={() => setIsFullScreen(!isFullScreen)}
-            className="p-1.5 bg-white/5 border border-white/10 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-all active:scale-95"
+            className="p-1.5 bg-white/5 border border-white/10 rounded-full text-zinc-400 hover:text-white hover:bg-white/10 transition-all active:scale-95"
             title={isFullScreen ? (lang === 'zh' ? '退出全屏' : 'Exit Full Screen') : (lang === 'zh' ? '全屏查看' : 'Full Screen')}
           >
             {isFullScreen ? <X className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
@@ -256,7 +263,7 @@ CRITICAL INSTRUCTIONS:
         )}
         {messages.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[90%] rounded-2xl px-3 py-2 ${msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-zinc-800 text-zinc-200'}`}>
+            <div className={`max-w-[90%] rounded-2xl px-3 py-2 ${msg.role === 'user' ? 'bg-white text-black' : 'bg-zinc-800 text-zinc-200'}`}>
               <div className="prose prose-invert prose-xs max-w-none">
                 <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} rehypePlugins={[rehypeKatex]}>
                   {formatContent(msg.text)}
@@ -276,11 +283,11 @@ CRITICAL INSTRUCTIONS:
 
       <div className="flex items-end gap-2">
         <textarea
-          value={input}
+          value={input || ''}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
           placeholder={t.placeholder}
-          className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 text-sm text-zinc-200 focus:outline-none focus:border-indigo-500 resize-none min-h-[40px] max-h-32"
+          className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 text-sm text-zinc-200 focus:outline-none focus:border-white/50 resize-none min-h-[40px] max-h-32"
           rows={1}
         />
         <button
@@ -293,7 +300,7 @@ CRITICAL INSTRUCTIONS:
         <button
           onClick={() => handleSend()}
           disabled={loading || !input.trim()}
-          className="p-3 rounded-xl bg-indigo-600 text-white disabled:opacity-50 hover:bg-indigo-700 transition-colors"
+          className="p-3 rounded-xl bg-white text-black disabled:opacity-50 hover:bg-zinc-200 transition-colors shadow-[0_0_20px_rgba(255,255,255,0.4)] active:scale-95"
         >
           <Send className="w-5 h-5" />
         </button>
@@ -303,7 +310,7 @@ CRITICAL INSTRUCTIONS:
 
   return (
     <>
-      <div className="bg-black/40 rounded-2xl border border-white/10 p-4 md:p-5 backdrop-blur-3xl mt-4 shadow-[0_0_30px_rgba(0,0,0,0.5)] ring-1 ring-white/5">
+      <div className="rounded-2xl border border-white/10 p-4 md:p-5 backdrop-blur-3xl mt-4 shadow-[0_0_30px_rgba(0,0,0,0.5)] ring-1 ring-white/5 liquid-panel">
         {ChatContent}
       </div>
 
@@ -319,7 +326,7 @@ CRITICAL INSTRUCTIONS:
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="w-full max-w-4xl h-full max-h-[90vh] bg-zinc-900/50 border border-white/10 rounded-3xl p-6 overflow-hidden flex flex-col shadow-2xl ring-1 ring-white/10"
+              className="w-full max-w-4xl h-full max-h-[90vh] border border-white/10 rounded-3xl p-6 overflow-hidden flex flex-col shadow-2xl ring-1 ring-white/10 liquid-panel-strong"
             >
               {ChatContent}
             </motion.div>
@@ -376,13 +383,13 @@ function QuestionDetail({
     <div className="flex items-center justify-between px-5 py-2.5 border-b border-white/5 bg-white/5">
       <div className="flex items-center gap-2">
         <div className={`p-1.5 rounded-lg ring-1 ${
-          type === 'question' ? 'bg-indigo-500/20 ring-indigo-500/30' : 
+          type === 'question' ? 'bg-white/10 ring-white/20' : 
           type === 'answer' ? 'bg-rose-500/20 ring-rose-500/30' :
           type === 'explanation' ? 'bg-emerald-500/20 ring-emerald-500/30' : 
           'bg-amber-500/20 ring-amber-500/30'
         }`}>
           <Icon className={`w-4 h-4 ${
-            type === 'question' ? 'text-indigo-400' : 
+            type === 'question' ? 'text-white' : 
             type === 'answer' ? 'text-rose-400' :
             type === 'explanation' ? 'text-emerald-400' : 
             'text-amber-400'
@@ -475,12 +482,12 @@ function QuestionDetail({
         </div>
       </div>
 
-      <div className="bg-black/40 rounded-2xl border border-white/10 overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-3xl ring-1 ring-white/5">
+      <div className="rounded-2xl border border-white/10 overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-3xl ring-1 ring-white/5 liquid-panel">
         <PanelHeader title={t.questionContent} icon={BookOpen} type="question" showCopy />
         {QuestionContent(false)}
       </div>
 
-      <div className="bg-black/40 rounded-2xl border border-white/10 overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-3xl ring-1 ring-white/5">
+      <div className="rounded-2xl border border-white/10 overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-3xl ring-1 ring-white/5 liquid-panel">
         <PanelHeader title={t.answer} icon={Check} type="answer" />
         <div className="p-4 text-zinc-200 font-medium text-lg">
           {data.answer}
@@ -488,7 +495,7 @@ function QuestionDetail({
       </div>
 
       <div className="grid md:grid-cols-2 gap-3">
-        <div className="bg-black/40 rounded-2xl border border-white/10 p-4 md:p-5 backdrop-blur-3xl ring-1 ring-white/5">
+        <div className="rounded-2xl border border-white/10 p-4 md:p-5 backdrop-blur-3xl ring-1 ring-white/5 liquid-panel">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className="p-1.5 bg-emerald-500/20 rounded-lg ring-1 ring-emerald-500/30">
@@ -507,7 +514,7 @@ function QuestionDetail({
           {ExplanationContent(false)}
         </div>
 
-        <div className="bg-black/40 rounded-2xl border border-white/10 p-4 md:p-5 backdrop-blur-3xl ring-1 ring-white/5">
+        <div className="rounded-2xl border border-white/10 p-4 md:p-5 backdrop-blur-3xl ring-1 ring-white/5 liquid-panel">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className="p-1.5 bg-amber-500/20 rounded-lg ring-1 ring-amber-500/30">
@@ -541,7 +548,7 @@ function QuestionDetail({
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="w-full max-w-4xl h-full max-h-[90vh] bg-zinc-900/50 border border-white/10 rounded-3xl overflow-hidden flex flex-col shadow-2xl ring-1 ring-white/10"
+              className="w-full max-w-4xl h-full max-h-[90vh] border border-white/10 rounded-3xl overflow-hidden flex flex-col shadow-2xl ring-1 ring-white/10 liquid-panel-strong"
             >
               {fullScreenPanel === 'question' && (
                 <>
@@ -623,7 +630,7 @@ function QuestionListItem({ data, index, onClick, lang }: { data: QuestionData; 
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05 }}
       onClick={onClick}
-      className="group bg-black/40 hover:bg-black/60 border border-white/10 hover:border-white/20 p-3.5 rounded-xl cursor-pointer transition-all duration-300 flex items-center justify-between shadow-lg backdrop-blur-2xl"
+      className="group hover:bg-white/5 border border-white/10 hover:border-white/20 p-3.5 rounded-xl cursor-pointer transition-all duration-300 flex items-center justify-between shadow-lg backdrop-blur-2xl liquid-panel"
     >
       <div className="flex items-center gap-3 overflow-hidden">
         <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-zinc-400 text-sm font-bold group-hover:bg-white group-hover:text-black transition-colors shrink-0">
@@ -660,11 +667,10 @@ function BackgroundLines() {
 
   return (
     <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff08_1px,transparent_1px),linear-gradient(to_bottom,#ffffff08_1px,transparent_1px)] bg-[size:3rem_3rem] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
       {verticalLines.map((line, i) => (
         <motion.div
           key={`v-${i}`}
-          className="absolute w-[1px] h-[30vh] bg-gradient-to-b from-transparent via-white/40 to-transparent shadow-[0_0_15px_rgba(255,255,255,0.3)]"
+          className="absolute w-[1px] h-[30vh] bg-gradient-to-b from-transparent via-white to-transparent shadow-[0_0_20px_rgba(255,255,255,0.5)]"
           style={{ left: line.left, top: '-30vh' }}
           animate={{ top: '130vh' }}
           transition={{ duration: line.duration, repeat: Infinity, ease: "linear", delay: line.delay }}
@@ -673,7 +679,7 @@ function BackgroundLines() {
       {horizontalLines.map((line, i) => (
         <motion.div
           key={`h-${i}`}
-          className="absolute h-[1px] w-[30vw] bg-gradient-to-r from-transparent via-white/40 to-transparent shadow-[0_0_15px_rgba(255,255,255,0.3)]"
+          className="absolute h-[1px] w-[30vw] bg-gradient-to-r from-transparent via-white to-transparent shadow-[0_0_20px_rgba(255,255,255,0.5)]"
           style={{ top: line.top, left: '-30vw' }}
           animate={{ left: '130vw' }}
           transition={{ duration: line.duration, repeat: Infinity, ease: "linear", delay: line.delay }}
@@ -684,7 +690,7 @@ function BackgroundLines() {
 }
 
 export default function App() {
-  const [appMode, setAppMode] = useState<'extractor' | 'audio-tutor'>('extractor');
+  const [appMode, setAppMode] = useState<'extractor' | 'audio-tutor' | 'reading-coach' | 'grapher'>('extractor');
   const [files, setFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [questions, setQuestions] = useState<QuestionData[]>([]);
@@ -702,7 +708,189 @@ export default function App() {
   const [selectedTextbookIds, setSelectedTextbookIds] = useState<string[]>([]);
   const [associateTextbook, setAssociateTextbook] = useState(false);
 
+  // Grapher State
+  const [graphFunctions, setGraphFunctions] = useState<{id: string, expression: string, visible: boolean, color: string}[]>([]);
+  const [graphParameters, setGraphParameters] = useState<Record<string, any>>({});
+  const [graphInputValue, setGraphInputValue] = useState('');
+  const [graphEditingId, setGraphEditingId] = useState<string | null>(null);
+  const [graphActiveTab, setGraphActiveTab] = useState<'manual' | 'photo'>('manual');
+  const [graphScanMode, setGraphScanMode] = useState<'fast' | 'precise'>('fast');
+  const [graphIsScanning, setGraphIsScanning] = useState(false);
+  const [graphScannedResults, setGraphScannedResults] = useState<string[]>([]);
+  const [graphSelectedIndices, setGraphSelectedIndices] = useState<Set<number>>(new Set());
+  const [graphShowColorPicker, setGraphShowColorPicker] = useState<string | null>(null);
+  const graphInputRef = useRef<HTMLInputElement>(null);
+  const graphFileInputRef = useRef<HTMLInputElement>(null);
+
+  const COLORS = [
+    '#6366f1', '#ec4899', '#f59e0b', '#10b981', '#ef4444', 
+    '#3b82f6', '#8b5cf6', '#06b6d4', '#f97316', '#14b8a6',
+    '#ffffff'
+  ];
+
+  const splitImplicitMultiplication = (expr: string) => {
+    const functions = ['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'log', 'ln', 'sqrt', 'abs', 'exp', 'pi', 'phi'];
+    let processed = expr;
+    const placeholders: string[] = [];
+    
+    // Sort functions by length descending to avoid partial matches
+    const sortedFns = [...functions].sort((a, b) => b.length - a.length);
+    
+    sortedFns.forEach((fn, i) => {
+      const placeholder = `__FN${i}__`;
+      processed = processed.replace(new RegExp(fn, 'gi'), placeholder);
+      placeholders[i] = fn;
+    });
+    
+    // Split adjacent letters: kx -> k x
+    processed = processed.replace(/([a-z])([a-z])/gi, '$1 $2');
+    processed = processed.replace(/([a-z])([a-z])/gi, '$1 $2'); // Double pass for cases like kxy
+    
+    // Restore functions
+    sortedFns.forEach((fn, i) => {
+      processed = processed.replace(new RegExp(`__FN${i}__`, 'g'), fn);
+    });
+    
+    return processed;
+  };
+
   const t = TRANSLATIONS[language];
+
+  // Grapher Helpers
+  const addGraphFunction = (expr: string) => {
+    if (!expr.trim()) return;
+    const processedExpr = splitImplicitMultiplication(expr);
+    detectGraphParameters(processedExpr);
+    if (graphEditingId) {
+      setGraphFunctions(prev => prev.map(f => f.id === graphEditingId ? { ...f, expression: expr } : f));
+      setGraphEditingId(null);
+    } else {
+      setGraphFunctions(prev => {
+        const newFunc = {
+          id: Math.random().toString(36).substr(2, 9),
+          expression: expr,
+          visible: true,
+          color: COLORS[prev.length % COLORS.length]
+        };
+        return [...prev, newFunc];
+      });
+    }
+    setGraphInputValue('');
+  };
+
+  const detectGraphParameters = (expr: string) => {
+    try {
+      const processed = splitImplicitMultiplication(expr);
+      const node = math.parse(processed.replace(/f\(x\)\s*=/g, '').replace(/y\s*=/g, ''));
+      const variables = new Set<string>();
+      node.traverse((n: any) => {
+        if (n.type === 'SymbolNode' && !['x', 'y', 'e', 'pi', 'PI', 'phi', 'i'].includes(n.name)) {
+          try {
+            if (typeof (math as any)[n.name] !== 'function') {
+              variables.add(n.name);
+            }
+          } catch {
+            variables.add(n.name);
+          }
+        }
+      });
+      
+      setGraphParameters(prev => {
+        const newParams = { ...prev };
+        let changed = false;
+        variables.forEach(v => {
+          if (!newParams[v]) {
+            newParams[v] = { name: v, value: 1, min: -10, max: 10, step: 0.1 };
+            changed = true;
+          }
+        });
+        return changed ? newParams : prev;
+      });
+    } catch (e) {}
+  };
+
+  const insertAtGraphCursor = (text: string) => {
+    const input = graphInputRef.current;
+    if (!input) return;
+    const start = input.selectionStart || 0;
+    const end = input.selectionEnd || 0;
+    let newValue = '';
+    let newCursorPos = start + text.length;
+    if (text === 'frac') {
+      const template = '()/()';
+      newValue = graphInputValue.substring(0, start) + template + graphInputValue.substring(end);
+      newCursorPos = start + 1;
+    } else if (['sqrt(', 'abs(', 'log(', 'sin(', 'cos(', 'tan('].includes(text)) {
+      const template = text + ')';
+      newValue = graphInputValue.substring(0, start) + template + graphInputValue.substring(end);
+      newCursorPos = start + text.length;
+    } else {
+      newValue = graphInputValue.substring(0, start) + text + graphInputValue.substring(end);
+      newCursorPos = start + text.length;
+    }
+    setGraphInputValue(newValue);
+    setTimeout(() => {
+      input.selectionStart = input.selectionEnd = newCursorPos;
+      input.focus();
+    }, 0);
+  };
+
+  const deleteAtGraphCursor = () => {
+    const input = graphInputRef.current;
+    if (!input) return;
+    const start = input.selectionStart || 0;
+    const end = input.selectionEnd || 0;
+    if (start === end && start > 0) {
+      const newValue = graphInputValue.substring(0, start - 1) + graphInputValue.substring(end);
+      setGraphInputValue(newValue);
+      setTimeout(() => { input.selectionStart = input.selectionEnd = start - 1; input.focus(); }, 0);
+    } else if (start !== end) {
+      const newValue = graphInputValue.substring(0, start) + graphInputValue.substring(end);
+      setGraphInputValue(newValue);
+      setTimeout(() => { input.selectionStart = input.selectionEnd = start; input.focus(); }, 0);
+    }
+  };
+
+  const moveGraphCursor = (dir: 'left' | 'right') => {
+    const input = graphInputRef.current;
+    if (!input) return;
+    const start = input.selectionStart || 0;
+    if (dir === 'left' && start > 0) input.selectionStart = input.selectionEnd = start - 1;
+    else if (dir === 'right' && start < graphInputValue.length) input.selectionStart = input.selectionEnd = start + 1;
+    input.focus();
+  };
+
+  const toGraphLatex = (expr: string) => {
+    try {
+      let cleanExpr = expr.trim();
+      if (!cleanExpr) return '';
+      const parts = cleanExpr.split('=');
+      let left = 'y';
+      let right = cleanExpr;
+      if (parts.length > 1) { left = parts[0].trim(); right = parts[1].trim(); }
+      let processedRight = right.replace(/log2\(([^)]+)\)/g, 'log($1, 2)').replace(/log10\(([^)]+)\)/g, 'log($1, 10)');
+      const node = math.parse(processedRight);
+      let tex = node.toTex({ parenthesis: 'keep', implicit: 'hide' });
+      return parts.length > 1 ? `${left} = ${tex}` : tex;
+    } catch (e) {
+      return expr.replace(/\//g, '\\div ').replace(/\*/g, '\\cdot ').replace(/sqrt\(([^)]+)\)/g, '\\sqrt{$1}').replace(/\(([^)]+)\)\/\(([^)]+)\)/g, '\\frac{$1}{$2}');
+    }
+  };
+
+  const handleGraphFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setGraphIsScanning(true);
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64 = (reader.result as string).split(',')[1];
+      const results = await extractFunctionsFromImage(base64, file.type, graphScanMode);
+      setGraphScannedResults(results);
+      setGraphSelectedIndices(new Set(results.map((_, i) => i)));
+      setGraphIsScanning(false);
+    };
+    reader.readAsDataURL(file);
+  };
 
   useEffect(() => {
     if (db) {
@@ -846,16 +1034,16 @@ CRITICAL INSTRUCTIONS:
   };
 
   return (
-    <div className="min-h-screen bg-black text-zinc-100 font-sans selection:bg-zinc-800 selection:text-white relative">
+    <div className={`min-h-screen bg-black text-zinc-100 font-sans selection:bg-zinc-800 selection:text-white relative flex flex-col`}>
       <BackgroundLines />
-      <div className="max-w-4xl mx-auto px-4 py-4 md:py-8 relative z-10">
-        <header className="mb-4 text-center p-3 rounded-2xl bg-black/40 border border-white/10 backdrop-blur-2xl shadow-2xl relative">
+      <div className={`max-w-4xl mx-auto px-4 py-4 md:py-8 relative z-10 flex-1 flex flex-col w-full`}>
+        <header className="mb-4 text-center p-3 rounded-2xl border border-white/10 backdrop-blur-2xl shadow-2xl relative shrink-0 liquid-panel">
           <div className="absolute top-3 right-3">
             <button
               onClick={() => setLanguage(prev => prev === 'zh' ? 'en' : 'zh')}
               className="px-2 py-1 bg-white/10 hover:bg-white/20 border border-white/10 rounded-md text-[10px] font-bold text-zinc-300 transition-all flex items-center gap-1"
             >
-              <span className="text-indigo-400">🌐</span>
+              <span className="text-white">🌐</span>
               {language === 'zh' ? 'EN' : '中文'}
             </button>
           </div>
@@ -864,7 +1052,7 @@ CRITICAL INSTRUCTIONS:
             animate={{ opacity: 1, y: 0 }}
             className="text-2xl md:text-4xl font-bold tracking-tight text-white mb-1"
           >
-            {t.title} <span className="text-indigo-500">Pro</span>
+            {t.title} <span className="text-white">Pro</span>
           </motion.h1>
           <motion.p 
             initial={{ opacity: 0 }}
@@ -876,148 +1064,496 @@ CRITICAL INSTRUCTIONS:
           </motion.p>
         </header>
 
-        <main className="space-y-6">
-          <div className="flex justify-center mb-6">
-            <div className="bg-black/40 p-1 rounded-xl border border-white/10 flex gap-1 backdrop-blur-md shadow-lg">
+        <main className={`space-y-6 flex-1 flex flex-col`}>
+          <div className="flex justify-center mb-8 shrink-0">
+            <div className="flex gap-4 md:gap-8 p-4 rounded-3xl border border-white/5 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] bg-black/20 liquid-panel">
               <button
                 onClick={() => setAppMode('extractor')}
-                className={`px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${appMode === 'extractor' ? 'bg-indigo-600 text-white shadow-[0_0_15px_rgba(99,102,241,0.4)]' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
+                className="group flex flex-col items-center gap-3 transition-all duration-300 active:scale-95 relative"
               >
-                {t.extractorMode}
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500 border border-white/10 ${
+                  appMode === 'extractor'
+                    ? 'bg-white text-black shadow-[0_0_50px_rgba(255,255,255,0.7)] scale-105 z-10'
+                    : 'bg-black/40 text-white hover:bg-black/60 z-0'
+                }`}>
+                  <FileText className="w-7 h-7" />
+                </div>
+                <span className={`text-xs font-medium transition-colors ${appMode === 'extractor' ? 'text-white' : 'text-zinc-400'}`}>
+                  {t.extractorMode}
+                </span>
               </button>
+              
               <button
                 onClick={() => setAppMode('audio-tutor')}
-                className={`px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${appMode === 'audio-tutor' ? 'bg-indigo-600 text-white shadow-[0_0_15px_rgba(99,102,241,0.4)]' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}
+                className="group flex flex-col items-center gap-3 transition-all duration-300 active:scale-95 relative"
               >
-                {t.audioTutorMode}
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500 border border-white/10 ${
+                  appMode === 'audio-tutor'
+                    ? 'bg-white text-black shadow-[0_0_50px_rgba(255,255,255,0.7)] scale-105 z-10'
+                    : 'bg-black/40 text-white hover:bg-black/60 z-0'
+                }`}>
+                  <Headphones className="w-7 h-7" />
+                </div>
+                <span className={`text-xs font-medium transition-colors ${appMode === 'audio-tutor' ? 'text-white' : 'text-zinc-400'}`}>
+                  {t.audioTutorMode}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setAppMode('grapher')}
+                className="group flex flex-col items-center gap-3 transition-all duration-300 active:scale-95 relative"
+              >
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500 border border-white/10 ${
+                  appMode === 'grapher'
+                    ? 'bg-white text-black shadow-[0_0_50px_rgba(255,255,255,0.7)] scale-105 z-10'
+                    : 'bg-black/40 text-white hover:bg-black/60 z-0'
+                }`}>
+                  <LineChart className="w-7 h-7" />
+                </div>
+                <span className={`text-xs font-medium transition-colors ${appMode === 'grapher' ? 'text-white' : 'text-zinc-400'}`}>
+                  {t.grapherMode}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setAppMode('reading-coach')}
+                className="group flex flex-col items-center gap-3 transition-all duration-300 active:scale-95 relative"
+              >
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500 border border-white/10 ${
+                  appMode === 'reading-coach'
+                    ? 'bg-white text-black shadow-[0_0_50px_rgba(255,255,255,0.7)] scale-105 z-10'
+                    : 'bg-black/40 text-white hover:bg-black/60 z-0'
+                }`}>
+                  <BookOpen className="w-7 h-7" />
+                </div>
+                <span className={`text-xs font-medium transition-colors ${appMode === 'reading-coach' ? 'text-white' : 'text-zinc-400'}`}>
+                  {language === 'zh' ? '朗读纠错' : 'Reading Coach'}
+                </span>
               </button>
             </div>
           </div>
 
           {/* Model Selection */}
-          <div className="flex flex-wrap md:flex-nowrap gap-2 bg-black/40 p-2 rounded-2xl border border-white/10 backdrop-blur-2xl shadow-lg">
-            {MODELS.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => setSelectedModel(m.id)}
-                className={`flex-1 min-w-[90px] p-2.5 rounded-xl border text-center transition-all duration-300 backdrop-blur-md ${
-                  selectedModel === m.id 
-                    ? 'bg-white/90 border-white text-black shadow-[0_0_15px_rgba(255,255,255,0.2)]' 
-                    : 'bg-black/40 border-white/10 text-zinc-400 hover:border-white/30 hover:bg-black/60'
-                }`}
-              >
-                <div className="font-bold text-xs truncate">{m.name}</div>
-              </button>
-            ))}
-          </div>
+          {appMode !== 'reading-coach' && appMode !== 'grapher' && (
+            <div className="flex flex-wrap md:flex-nowrap gap-4 justify-center py-2">
+              {MODELS.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => setSelectedModel(m.id)}
+                  className={`relative group transition-all duration-300 active:scale-95`}
+                >
+                  <div className={`px-6 py-3 rounded-full flex items-center justify-center transition-all duration-500 border border-white/10 backdrop-blur-md ${
+                    selectedModel === m.id 
+                      ? 'bg-white text-black shadow-[0_0_30px_rgba(255,255,255,0.5)] scale-105' 
+                      : 'bg-black/40 text-zinc-400 hover:text-white hover:bg-black/60'
+                  }`}>
+                    <span className="font-bold text-xs tracking-wide">{m.name}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Textbook Association Section */}
-          <div className="flex items-center justify-between bg-black/40 p-4 rounded-2xl border border-white/10 backdrop-blur-2xl shadow-lg">
-            <div className="flex items-center gap-4">
-              {appMode === 'audio-tutor' && (
-                <>
-                  <label className="flex items-center gap-2 cursor-pointer group">
-                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${associateTextbook ? 'bg-indigo-500 border-indigo-500' : 'border-white/20 group-hover:border-indigo-400'}`}>
-                      {associateTextbook && <Check className="w-3.5 h-3.5 text-white" />}
-                    </div>
-                    <input 
-                      type="checkbox" 
-                      className="hidden" 
-                      checked={associateTextbook} 
-                      onChange={(e) => setAssociateTextbook(e.target.checked)} 
-                    />
-                    <span className="text-sm font-medium text-zinc-200 group-hover:text-white transition-colors">
-                      {t.associateTextbook}
-                    </span>
-                  </label>
-                  
-                  {associateTextbook && (
-                    <div className="flex flex-wrap gap-2 mt-2 md:mt-0">
-                      {textbooks.map(book => {
-                        const isSelected = selectedTextbookIds.includes(book.id);
-                        return (
-                          <button
-                            key={book.id}
-                            onClick={() => {
-                              if (isSelected) {
-                                setSelectedTextbookIds(prev => prev.filter(id => id !== book.id));
-                              } else {
-                                setSelectedTextbookIds(prev => [...prev, book.id]);
-                              }
-                            }}
-                            className={`px-3 py-1 text-xs font-medium rounded-full border transition-all ${
-                              isSelected 
-                                ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-300' 
-                                : 'bg-white/5 border-white/10 text-zinc-400 hover:bg-white/10'
-                            }`}
-                          >
-                            {book.name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </>
-              )}
+          {appMode !== 'reading-coach' && appMode !== 'grapher' && (
+            <div className="flex items-center justify-between p-4 rounded-3xl border border-white/5 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] bg-black/20 liquid-panel">
+              <div className="flex items-center gap-4">
+                {appMode === 'audio-tutor' && (
+                  <>
+                    <label className="flex items-center gap-3 cursor-pointer group">
+                      <div className={`w-6 h-6 rounded-full border flex items-center justify-center transition-all duration-300 ${associateTextbook ? 'bg-white border-white shadow-[0_0_15px_rgba(255,255,255,0.4)]' : 'border-white/20 group-hover:border-white/50 bg-black/40'}`}>
+                        {associateTextbook && <Check className="w-3.5 h-3.5 text-black" />}
+                      </div>
+                      <input 
+                        type="checkbox" 
+                        className="hidden" 
+                        checked={associateTextbook} 
+                        onChange={(e) => setAssociateTextbook(e.target.checked)} 
+                      />
+                      <span className="text-sm font-medium text-zinc-300 group-hover:text-white transition-colors">
+                        {t.associateTextbook}
+                      </span>
+                    </label>
+                    
+                    {associateTextbook && (
+                      <div className="flex flex-wrap gap-2 mt-2 md:mt-0">
+                        {textbooks.map(book => {
+                          const isSelected = selectedTextbookIds.includes(book.id);
+                          return (
+                            <button
+                              key={book.id}
+                              onClick={() => {
+                                if (isSelected) {
+                                  setSelectedTextbookIds(prev => prev.filter(id => id !== book.id));
+                                } else {
+                                  setSelectedTextbookIds(prev => [...prev, book.id]);
+                                }
+                              }}
+                              className={`px-3 py-1 text-xs font-medium rounded-full border transition-all ${
+                                isSelected 
+                                  ? 'bg-white text-black border-white shadow-[0_0_15px_rgba(255,255,255,0.4)]' 
+                                  : 'bg-black/40 border-white/10 text-zinc-400 hover:text-white hover:bg-white/10'
+                              }`}
+                            >
+                              {book.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+              
+              <button 
+                onClick={() => setShowTextbookManager(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-black/40 hover:bg-white/10 border border-white/10 hover:border-white/30 rounded-full text-sm text-zinc-300 hover:text-white transition-all shadow-lg active:scale-95"
+              >
+                <Book className="w-4 h-4" />
+                {t.manageTextbooks}
+              </button>
             </div>
-            
-            <button 
-              onClick={() => setShowTextbookManager(true)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm text-zinc-300 transition-colors"
-            >
-              <Book className="w-4 h-4" />
-              {t.manageTextbooks}
-            </button>
-          </div>
+          )}
 
-          {appMode === 'audio-tutor' ? (
-            <AudioTutorView 
-              files={files} 
-              setFiles={setFiles} 
-              lang={language} 
-              associateTextbook={associateTextbook}
-              selectedTextbookIds={selectedTextbookIds}
-              textbooks={textbooks}
-            />
-          ) : selectedIdx === null ? (
-            <>
+          <AnimatePresence mode="wait">
+            {appMode === 'grapher' ? (
+              <motion.div
+                key="grapher"
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 20 }}
+                transition={{ duration: 0.3 }}
+                className="flex-1 flex flex-col gap-6"
+              >
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1">
+                  {/* Right Panel: Graph */}
+                  <div className="lg:col-span-8 flex flex-col gap-4 min-h-[500px]">
+                    <div className="flex-1 relative">
+                      <GraphView 
+                        functions={graphFunctions.filter(f => f.visible).map(f => ({ expression: f.expression, color: f.color }))} 
+                        parameters={graphParameters}
+                      />
+                    </div>
+
+                    {/* Parameters - Removed from here, now integrated into Function List */}
+                  </div>
+
+                  {/* Left Panel: Controls */}
+                  <div className="lg:col-span-4 flex flex-col gap-4">
+                    {/* Function List - Moved Up */}
+                    <div className="p-4 rounded-3xl border border-white/10 bg-black/40 backdrop-blur-xl shadow-2xl liquid-panel overflow-y-auto max-h-[500px] custom-scrollbar">
+                      <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4">{language === 'zh' ? '函数列表' : 'Functions'}</h3>
+                      <div className="space-y-4">
+                        {graphFunctions.map((f) => {
+                          // Find parameters used in this function
+                          const processed = splitImplicitMultiplication(f.expression);
+                          const usedParams: string[] = [];
+                          try {
+                            const node = math.parse(processed.replace(/f\(x\)\s*=/g, '').replace(/y\s*=/g, ''));
+                            node.traverse((n: any) => {
+                              if (n.type === 'SymbolNode' && graphParameters[n.name]) {
+                                if (!usedParams.includes(n.name)) usedParams.push(n.name);
+                              }
+                            });
+                          } catch(e) {}
+
+                          return (
+                            <div key={f.id} className="group p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-white/20 transition-all space-y-4">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-3 flex-1 overflow-hidden">
+                                  <div className="relative">
+                                    <button 
+                                      onClick={() => setGraphFunctions(graphFunctions.map(func => func.id === f.id ? { ...func, visible: !func.visible } : func))}
+                                      className={`w-5 h-5 rounded-full border-2 transition-all ${f.visible ? 'bg-current border-transparent' : 'bg-transparent border-zinc-600'}`}
+                                      style={{ color: f.color }}
+                                    />
+                                  </div>
+                                  <div className="flex-1 overflow-hidden">
+                                    <InlineMath math={toGraphLatex(f.expression)} />
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button 
+                                    onClick={() => setGraphShowColorPicker(graphShowColorPicker === f.id ? null : f.id)}
+                                    className={`p-2 rounded-xl transition-all border ${graphShowColorPicker === f.id ? 'bg-white text-black border-white' : 'bg-white/5 text-zinc-400 hover:text-white border-white/5'}`}
+                                    style={{ color: graphShowColorPicker === f.id ? undefined : f.color }}
+                                    title={language === 'zh' ? '颜色' : 'Color'}
+                                  >
+                                    <Palette className="w-4 h-4" />
+                                  </button>
+                                  <button 
+                                    onClick={() => { setGraphInputValue(f.expression); setGraphEditingId(f.id); setGraphActiveTab('manual'); }}
+                                    className="p-2 bg-white/5 hover:bg-white/10 rounded-xl text-zinc-400 hover:text-white transition-all border border-white/5"
+                                    title={language === 'zh' ? '编辑' : 'Edit'}
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                  <button 
+                                    onClick={() => setGraphFunctions(graphFunctions.filter(func => func.id !== f.id))}
+                                    className="p-2 bg-red-500/10 hover:bg-red-500/20 rounded-xl text-zinc-400 hover:text-red-400 transition-all border border-red-500/10"
+                                    title={language === 'zh' ? '删除' : 'Delete'}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Color Picker - Now Toggled */}
+                              <AnimatePresence>
+                                {graphShowColorPicker === f.id && (
+                                  <motion.div 
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    className="overflow-hidden"
+                                  >
+                                    <div className="flex flex-wrap gap-2 py-3 border-t border-white/5">
+                                      {COLORS.map(color => (
+                                        <button
+                                          key={color}
+                                          onClick={() => {
+                                            setGraphFunctions(graphFunctions.map(func => func.id === f.id ? { ...func, color } : func));
+                                            setGraphShowColorPicker(null);
+                                          }}
+                                          className={`w-6 h-6 rounded-full border-2 transition-all ${f.color === color ? 'scale-110 border-white shadow-[0_0_15px_rgba(255,255,255,0.3)]' : 'border-transparent opacity-60 hover:opacity-100 hover:scale-110'}`}
+                                          style={{ backgroundColor: color }}
+                                        />
+                                      ))}
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+
+                              {/* Parameters for this function */}
+                              {usedParams.length > 0 && (
+                                <div className="space-y-4 pt-2 border-t border-white/5">
+                                  {usedParams.map(paramName => {
+                                    const p = graphParameters[paramName];
+                                    if (!p) return null;
+                                    return (
+                                      <div key={p.name} className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-[10px] font-mono text-zinc-400 tracking-widest">{p.name} = {p.value.toFixed(2)}</span>
+                                          <button onClick={() => {
+                                            const next = { ...graphParameters };
+                                            delete next[p.name];
+                                            setGraphParameters(next);
+                                          }} className="p-1 hover:bg-white/10 rounded text-zinc-500 hover:text-white">
+                                            <X className="w-3 h-3" />
+                                          </button>
+                                        </div>
+                                        <input 
+                                          type="range" 
+                                          min={p.min} 
+                                          max={p.max} 
+                                          step={p.step} 
+                                          value={p.value ?? 0}
+                                          onChange={(e) => setGraphParameters({ ...graphParameters, [p.name]: { ...p, value: parseFloat(e.target.value) } })}
+                                          className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-white"
+                                        />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {graphFunctions.length === 0 && (
+                          <div className="text-center py-8 text-zinc-600">
+                            <LineChart className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                            <p className="text-xs">{language === 'zh' ? '暂无函数' : 'No functions yet'}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="p-4 rounded-3xl border border-white/10 bg-black/40 backdrop-blur-xl shadow-2xl liquid-panel flex flex-col gap-4">
+                      <div className="flex bg-white/5 p-1 rounded-2xl gap-1">
+                        <button 
+                          onClick={() => setGraphActiveTab('manual')}
+                          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold transition-all ${graphActiveTab === 'manual' ? 'bg-white text-black shadow-lg' : 'text-zinc-500 hover:bg-white/5'}`}
+                        >
+                          <Keyboard className="w-4 h-4" />
+                          {language === 'zh' ? '手动输入' : 'Manual'}
+                        </button>
+                        <button 
+                          onClick={() => setGraphActiveTab('photo')}
+                          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold transition-all ${graphActiveTab === 'photo' ? 'bg-white text-black shadow-lg' : 'text-zinc-500 hover:bg-white/5'}`}
+                        >
+                          <Camera className="w-4 h-4" />
+                          {language === 'zh' ? '拍照识别' : 'Photo Scan'}
+                        </button>
+                      </div>
+
+                      {graphActiveTab === 'manual' ? (
+                        <div className="space-y-4">
+                          <div className="relative group">
+                            <input
+                              ref={graphInputRef}
+                              type="text"
+                              inputMode="none"
+                              value={graphInputValue || ''}
+                              onChange={(e) => setGraphInputValue(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && addGraphFunction(graphInputValue)}
+                              placeholder={language === 'zh' ? '输入函数, 如: y = x^2' : 'Enter function, e.g., y = x^2'}
+                              className="w-full bg-black/60 border border-white/10 rounded-2xl px-4 py-3 text-white placeholder:text-zinc-600 focus:outline-none focus:border-white/30 transition-all font-mono text-sm"
+                            />
+                            <button 
+                              onClick={() => addGraphFunction(graphInputValue)}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-white text-black rounded-xl hover:bg-zinc-200 transition-all active:scale-95"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <MathKeyboard 
+                            onKeyClick={insertAtGraphCursor}
+                            onDelete={deleteAtGraphCursor}
+                            onClear={() => setGraphInputValue('')}
+                            onMoveCursor={moveGraphCursor}
+                          />
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <div 
+                            onClick={() => graphFileInputRef.current?.click()}
+                            className="border-2 border-dashed border-white/10 rounded-3xl p-8 text-center cursor-pointer hover:border-white/30 hover:bg-white/5 transition-all group relative overflow-hidden"
+                          >
+                            <input type="file" ref={graphFileInputRef} onChange={handleGraphFileUpload} accept="image/*" className="hidden" />
+                            {graphIsScanning ? (
+                              <div className="flex flex-col items-center gap-3">
+                                <Loader2 className="w-8 h-8 animate-spin text-white" />
+                                <p className="text-sm font-medium text-zinc-300">{language === 'zh' ? '正在识别函数...' : 'Scanning functions...'}</p>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center gap-3">
+                                <div className="p-4 rounded-full bg-white/5 text-zinc-400 group-hover:bg-white group-hover:text-black transition-all shadow-lg">
+                                  <ImageIcon className="w-8 h-8" />
+                                </div>
+                                <p className="text-sm font-medium text-zinc-300">{language === 'zh' ? '点击上传或拖拽图片' : 'Click to upload or drag image'}</p>
+                              </div>
+                            )}
+                          </div>
+
+                          {graphScannedResults.length > 0 && (
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest">{language === 'zh' ? '识别结果' : 'Scanned Results'}</p>
+                                <button 
+                                  onClick={() => {
+                                    graphScannedResults.forEach((res, i) => {
+                                      if (graphSelectedIndices.has(i)) addGraphFunction(res);
+                                    });
+                                    setGraphScannedResults([]);
+                                  }}
+                                  className="text-xs font-bold text-white bg-white/10 px-3 py-1 rounded-full hover:bg-white hover:text-black transition-all"
+                                >
+                                  {language === 'zh' ? '全部添加' : 'Add All'}
+                                </button>
+                              </div>
+                              <div className="max-h-48 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                                {graphScannedResults.map((res, i) => (
+                                  <div 
+                                    key={i} 
+                                    onClick={() => {
+                                      const next = new Set(graphSelectedIndices);
+                                      if (next.has(i)) next.delete(i); else next.add(i);
+                                      setGraphSelectedIndices(next);
+                                    }}
+                                    className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${graphSelectedIndices.has(i) ? 'bg-white/10 border-white/30' : 'bg-black/20 border-white/5 opacity-50'}`}
+                                  >
+                                    <div className="flex-1 overflow-hidden">
+                                      <InlineMath math={toGraphLatex(res)} />
+                                    </div>
+                                    {graphSelectedIndices.has(i) && <Check className="w-4 h-4 text-white shrink-0" />}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            ) : appMode === 'audio-tutor' ? (
+              <motion.div
+                key="audio-tutor"
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 20 }}
+                transition={{ duration: 0.3 }}
+                className="flex-1 flex flex-col"
+              >
+                <AudioTutorView 
+                  files={files} 
+                  setFiles={setFiles} 
+                  lang={language} 
+                  associateTextbook={associateTextbook}
+                  selectedTextbookIds={selectedTextbookIds}
+                  textbooks={textbooks}
+                />
+              </motion.div>
+            ) : appMode === 'reading-coach' ? (
+              <motion.div
+                key="reading-coach"
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 20 }}
+                transition={{ duration: 0.3 }}
+                className="flex-1 flex flex-col"
+              >
+                <div className="flex-1 min-h-[70vh] rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
+                  <ReadingCoach lang={language} />
+                </div>
+              </motion.div>
+            ) : selectedIdx === null ? (
+              <motion.div
+                key="extractor-list"
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 20 }}
+                transition={{ duration: 0.3 }}
+                className="flex-1 flex flex-col"
+              >
               {/* Model & Upload Section */}
-              <div className="bg-black/40 p-1 rounded-2xl border border-white/10 backdrop-blur-2xl shadow-2xl">
-                <div className="bg-black/40 p-3 md:p-4 rounded-xl border border-white/5 backdrop-blur-2xl space-y-4">
+              <div className="p-1 rounded-2xl border border-white/10 backdrop-blur-2xl shadow-2xl liquid-panel">
+                <div className="p-3 md:p-4 rounded-xl border border-white/5 backdrop-blur-2xl space-y-4 liquid-panel">
                   
                   {/* Hidden Inputs */}
                   <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" multiple className="hidden" />
                   <input type="file" ref={cameraInputRef} onChange={handleFileChange} accept="image/*" capture="environment" multiple className="hidden" />
 
                   {files.length === 0 ? (
-                    <div className="flex flex-col md:flex-row gap-2">
+                    <div className="flex flex-col md:flex-row gap-4">
                       <div
                         onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                         onDragLeave={() => setIsDragging(false)}
                         onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files) processFiles(e.dataTransfer.files); }}
                         onClick={() => fileInputRef.current?.click()}
                         className={`
-                          flex-1 relative border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all duration-500
-                          ${isDragging ? 'border-white bg-white/10 scale-[0.99]' : 'border-white/10 hover:border-white/30 hover:bg-white/5'}
+                          flex-1 relative border border-white/10 rounded-3xl p-8 text-center cursor-pointer transition-all duration-500
+                          ${isDragging ? 'bg-white text-black scale-[0.99] shadow-[0_0_50px_rgba(255,255,255,0.5)]' : 'bg-black/20 hover:bg-black/40 hover:border-white/30'}
                         `}
                       >
-                        <div className="flex flex-col items-center gap-2">
-                          <div className="p-2 rounded-lg bg-black/50 text-zinc-400">
-                            <Upload className="w-4 h-4" />
+                        <div className="flex flex-col items-center gap-4">
+                          <div className={`p-4 rounded-full transition-all duration-500 ${isDragging ? 'bg-black text-white' : 'bg-white/5 text-zinc-400 group-hover:bg-white group-hover:text-black shadow-[0_0_20px_rgba(255,255,255,0.1)]'}`}>
+                            <Upload className="w-8 h-8" />
                           </div>
-                          <p className="text-zinc-300 text-xs font-medium">{t.upload}</p>
+                          <p className={`text-sm font-medium transition-colors ${isDragging ? 'text-black' : 'text-zinc-300'}`}>{t.upload}</p>
                         </div>
                       </div>
 
                       <div
                         onClick={() => cameraInputRef.current?.click()}
-                        className="md:w-32 relative border-2 border-white/10 rounded-xl p-6 text-center cursor-pointer hover:border-white/30 hover:bg-white/5 transition-all duration-500 group"
+                        className="md:w-48 relative border border-white/10 rounded-3xl p-8 text-center cursor-pointer bg-black/20 hover:bg-black/40 hover:border-white/30 transition-all duration-500 group"
                       >
-                        <div className="flex flex-col items-center gap-2">
-                          <div className="p-2 rounded-lg bg-black/50 text-zinc-400 group-hover:bg-white group-hover:text-black transition-colors">
-                            <Camera className="w-4 h-4" />
+                        <div className="flex flex-col items-center gap-4">
+                          <div className="p-4 rounded-full bg-white/5 text-zinc-400 group-hover:bg-white group-hover:text-black transition-all duration-500 shadow-[0_0_20px_rgba(255,255,255,0.1)]">
+                            <Camera className="w-8 h-8" />
                           </div>
-                          <p className="text-zinc-300 text-xs font-medium">{t.camera}</p>
+                          <p className="text-zinc-300 text-sm font-medium">{t.camera}</p>
                         </div>
                       </div>
                     </div>
@@ -1042,7 +1578,7 @@ CRITICAL INSTRUCTIONS:
                       </div>
                       
                       <div className="flex flex-col justify-center gap-3 w-full">
-                        <div className="flex items-center gap-2 text-zinc-300 bg-black/40 p-3 rounded-lg border border-white/10">
+                        <div className="flex items-center gap-2 text-zinc-300 p-3 rounded-lg border border-white/10 liquid-panel">
                           <FileImage className="w-3.5 h-3.5 text-zinc-500" />
                           <span className="font-medium truncate text-[10px]">{t.selected} {files.length} {language === 'zh' ? '张' : 'images'}</span>
                         </div>
@@ -1050,7 +1586,7 @@ CRITICAL INSTRUCTIONS:
                         <div className="flex gap-2">
                           <button
                             onClick={clearFiles}
-                            className="px-4 py-2.5 bg-black/40 text-white text-xs font-bold rounded-lg hover:bg-red-500/20 hover:text-red-400 border border-white/10 hover:border-red-500/50 transition-all active:scale-[0.98]"
+                            className="px-4 py-2.5 text-white text-xs font-bold rounded-lg hover:bg-red-500/20 hover:text-red-400 border border-white/10 hover:border-red-500/50 transition-all active:scale-[0.98] liquid-button"
                           >
                             {t.clear}
                           </button>
@@ -1112,21 +1648,31 @@ CRITICAL INSTRUCTIONS:
                   </motion.div>
                 )}
               </AnimatePresence>
-            </>
-          ) : (
-            <QuestionDetail 
-              data={questions[selectedIdx]} 
-              onBack={() => setSelectedIdx(null)} 
-              onNext={() => setSelectedIdx(prev => prev !== null ? prev + 1 : null)}
-              onPrev={() => setSelectedIdx(prev => prev !== null ? prev - 1 : null)}
-              hasNext={selectedIdx < questions.length - 1}
-              hasPrev={selectedIdx > 0}
-              model={selectedModel}
-              setModel={setSelectedModel}
-              lang={language}
-              textbooks={textbooks}
-            />
-          )}
+              </motion.div>
+            ) : (
+              <motion.div
+                key="extractor-detail"
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 20 }}
+                transition={{ duration: 0.3 }}
+                className="flex-1 flex flex-col"
+              >
+                <QuestionDetail 
+                  data={questions[selectedIdx]} 
+                  onBack={() => setSelectedIdx(null)} 
+                  onNext={() => setSelectedIdx(prev => prev !== null ? prev + 1 : null)}
+                  onPrev={() => setSelectedIdx(prev => prev !== null ? prev - 1 : null)}
+                  hasNext={selectedIdx < questions.length - 1}
+                  hasPrev={selectedIdx > 0}
+                  model={selectedModel}
+                  setModel={setSelectedModel}
+                  lang={language}
+                  textbooks={textbooks}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </main>
       </div>
 

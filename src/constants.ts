@@ -6,10 +6,12 @@ export const MODELS = [
 
 export const TRANSLATIONS = {
   zh: {
-    title: '作业帮手',
-    subtitle: '智能识别题目，一键提取解析，或生成专属语音讲解。',
+    title: '学习助手',
+    subtitle: '智能识别题目，一键提取解析，或生成专属语音讲解。支持函数绘图。',
     extractorMode: '题目提取',
     audioTutorMode: '语音讲题',
+    readingCorrectionMode: '朗读纠错',
+    grapherMode: '函数绘图仪',
     uploading: '上传文件中...',
     generating: '生成讲题音频中...',
     audioTutorPrompt: '这是一道题目的图片。请直接给出详细的讲解。不要念题目。如果是选择题，请详细解释每个选项为什么对、为什么错；如果是判断题，请指出错在哪里。语言要自然、口语化，适合作为语音讲解的文案。',
@@ -49,10 +51,12 @@ export const TRANSLATIONS = {
     fetchingTextbook: '正在获取教材内容...',
   },
   en: {
-    title: 'Homework Helper',
-    subtitle: 'Smartly extract questions or generate personalized audio explanations.',
+    title: 'Study Assistant',
+    subtitle: 'Smartly extract questions, generate personalized audio explanations, or plot functions.',
     extractorMode: 'Question Extractor',
     audioTutorMode: 'Audio Tutor',
+    readingCorrectionMode: 'Reading Correction',
+    grapherMode: 'Graphing Calculator',
     uploading: 'Uploading file...',
     generating: 'Generating audio...',
     audioTutorPrompt: 'This is an image of a question. Please provide a detailed explanation directly. Do NOT read the question text. For multiple-choice questions, explain why each option is correct or incorrect; for true/false questions, point out where the error is. Use a natural, conversational tone suitable for an audio explanation script.',

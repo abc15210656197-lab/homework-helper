@@ -155,24 +155,24 @@ function LiveQnA({ imageBase64, mimeType, lang }: { imageBase64: string, mimeTyp
   }, []);
 
   return (
-    <div className="mt-6 p-6 bg-indigo-900/20 border border-indigo-500/30 rounded-2xl flex flex-col items-center gap-4 shadow-lg">
-      <h3 className="text-lg font-bold text-indigo-300 flex items-center gap-2">
+    <div className="mt-6 p-6 bg-zinc-900/50 border border-white/10 rounded-2xl flex flex-col items-center gap-4 shadow-lg liquid-panel">
+      <h3 className="text-lg font-bold text-white flex items-center gap-2">
         <Mic className="w-5 h-5" />
         {t.liveQnA}
       </h3>
       {isLive ? (
         <div className="flex flex-col items-center gap-4 w-full">
-          <div className="w-20 h-20 rounded-full bg-indigo-500/20 flex items-center justify-center animate-pulse ring-4 ring-indigo-500/30">
-            <Mic className="w-10 h-10 text-indigo-400" />
+          <div className="w-20 h-20 rounded-full bg-white/10 flex items-center justify-center animate-pulse ring-4 ring-white/20">
+            <Mic className="w-10 h-10 text-white" />
           </div>
-          <p className="text-sm font-medium text-indigo-200">{status}</p>
-          <button onClick={stopAll} className="px-6 py-2.5 bg-red-500/20 text-red-400 font-bold rounded-full hover:bg-red-500/30 transition-colors flex items-center gap-2">
+          <p className="text-sm font-medium text-zinc-300">{status}</p>
+          <button onClick={stopAll} className="px-6 py-2.5 bg-red-500/20 text-red-400 font-bold rounded-full hover:bg-red-500/30 transition-colors flex items-center gap-2 liquid-button">
             <StopCircle className="w-5 h-5" />
             {t.endLive}
           </button>
         </div>
       ) : (
-        <button onClick={startLive} className="px-8 py-3.5 bg-indigo-600 text-white font-bold rounded-full hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-lg shadow-indigo-500/20 active:scale-95">
+        <button onClick={startLive} className="px-8 py-3.5 bg-white text-black font-bold rounded-full hover:bg-zinc-200 transition-all flex items-center gap-2 shadow-[0_0_30px_rgba(255,255,255,0.4)] active:scale-95">
           <Mic className="w-5 h-5" />
           {t.startLive}
         </button>
@@ -326,8 +326,8 @@ export function AudioTutorView({
 
   if (state === 'uploading' || state === 'generating') {
     return (
-      <div className="flex flex-col items-center justify-center py-20 bg-black/40 rounded-2xl border border-white/10 backdrop-blur-2xl">
-        <Loader2 className="w-12 h-12 text-indigo-500 animate-spin mb-6" />
+      <div className="flex flex-col items-center justify-center py-20 rounded-2xl border border-white/10 backdrop-blur-2xl liquid-panel">
+        <Loader2 className="w-12 h-12 text-white animate-spin mb-6" />
         <h3 className="text-xl font-bold text-white mb-2">
           {state === 'uploading' ? t.uploading : t.generating}
         </h3>
@@ -346,12 +346,12 @@ export function AudioTutorView({
         className="space-y-6"
       >
         <div className="flex items-center justify-between">
-          <button onClick={clear} className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm transition-colors">
+          <button onClick={clear} className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm transition-colors liquid-button">
             {t.back}
           </button>
         </div>
 
-        <div className="bg-black/40 rounded-2xl border border-white/10 p-6 backdrop-blur-2xl shadow-2xl">
+        <div className="rounded-2xl border border-white/10 p-6 backdrop-blur-2xl shadow-2xl liquid-panel">
           <div className="flex flex-col items-center gap-6">
             <div className="w-full max-w-md aspect-video bg-zinc-900 rounded-xl overflow-hidden border border-white/10">
               <img src={`data:${data.mimeType};base64,${data.imageBase64}`} alt="Question" className="w-full h-full object-contain" />
@@ -368,16 +368,16 @@ export function AudioTutorView({
             
             <button 
               onClick={togglePlay}
-              className="w-20 h-20 bg-indigo-600 rounded-full flex items-center justify-center hover:bg-indigo-500 transition-all shadow-[0_0_30px_rgba(99,102,241,0.4)] active:scale-95"
+              className="w-20 h-20 bg-white rounded-full flex items-center justify-center hover:bg-zinc-200 transition-all shadow-[0_0_40px_rgba(255,255,255,0.5)] active:scale-95"
             >
-              {isPlaying ? <Pause className="w-8 h-8 text-white" /> : <Play className="w-8 h-8 text-white ml-1" />}
+              {isPlaying ? <Pause className="w-8 h-8 text-black" /> : <Play className="w-8 h-8 text-black ml-1" />}
             </button>
           </div>
         </div>
 
-        <div className="bg-black/40 rounded-2xl border border-white/10 p-6 backdrop-blur-2xl">
+        <div className="rounded-2xl border border-white/10 p-6 backdrop-blur-2xl liquid-panel">
           <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-            <FileImage className="w-5 h-5 text-indigo-400" />
+            <FileImage className="w-5 h-5 text-white" />
             {t.textContent}
           </h3>
           <div className="prose prose-invert prose-zinc max-w-none text-zinc-300 leading-relaxed">
@@ -393,8 +393,8 @@ export function AudioTutorView({
   }
 
   return (
-    <div className="bg-black/40 p-1 rounded-2xl border border-white/10 backdrop-blur-2xl shadow-2xl">
-      <div className="bg-black/40 p-3 md:p-4 rounded-xl border border-white/5 backdrop-blur-2xl space-y-4">
+    <div className="p-1 rounded-2xl border border-white/10 backdrop-blur-2xl shadow-2xl liquid-panel">
+      <div className="p-3 md:p-4 rounded-xl border border-white/5 backdrop-blur-2xl space-y-4 liquid-panel">
         {/* Hidden Inputs */}
         <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
         <input type="file" ref={cameraInputRef} onChange={handleFileChange} accept="image/*" capture="environment" className="hidden" />
@@ -448,7 +448,7 @@ export function AudioTutorView({
               </div>
               <button 
                 onClick={handleGenerate}
-                className="px-6 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 transition-all shadow-[0_0_15px_rgba(99,102,241,0.4)] flex items-center gap-2 active:scale-95"
+                className="px-6 py-2 bg-white text-black text-sm font-bold rounded-lg hover:bg-zinc-200 transition-all shadow-[0_0_20px_rgba(255,255,255,0.4)] flex items-center gap-2 active:scale-95"
               >
                 <Play className="w-4 h-4" />
                 {t.start}

@@ -1,5 +1,5 @@
 {
-  "name": "Question Extractor",
-  "description": "Upload an image to extract questions and convert them to Markdown format.",
-  "requestFramePermissions": ["camera"]
+  "name": "作业帮手 Pro",
+  "description": "智能识别题目，一键提取解析，或生成专属语音讲解。支持英语朗读纠错。",
+  "requestFramePermissions": ["camera", "microphone"]
 }
