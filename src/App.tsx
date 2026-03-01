@@ -21,6 +21,8 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from './firebase';
 import * as math from 'mathjs';
 
+import { MaterialAssistant } from './components/MaterialAssistant';
+
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const formatContent = (content: string) => {
@@ -693,7 +695,7 @@ function BackgroundLines() {
 }
 
 export default function App() {
-  const [appMode, setAppMode] = useState<'extractor' | 'audio-tutor' | 'reading-coach' | 'grapher'>('extractor');
+  const [appMode, setAppMode] = useState<'extractor' | 'audio-tutor' | 'reading-coach' | 'grapher' | 'material-assistant'>('extractor');
   const [files, setFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [questions, setQuestions] = useState<QuestionData[]>([]);
@@ -707,7 +709,9 @@ export default function App() {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   
   const [showTextbookManager, setShowTextbookManager] = useState(false);
+  const [showMaterialManager, setShowMaterialManager] = useState(false);
   const [textbooks, setTextbooks] = useState<Textbook[]>([]);
+  const [materials, setMaterials] = useState<Textbook[]>([]);
   const [selectedTextbookIds, setSelectedTextbookIds] = useState<string[]>([]);
   const [associateTextbook, setAssociateTextbook] = useState(false);
 
@@ -913,6 +917,41 @@ export default function App() {
   useEffect(() => {
     loadTextbooks();
   }, [showTextbookManager]);
+
+  useEffect(() => {
+    loadMaterials();
+  }, [showMaterialManager]);
+
+  const loadMaterials = async () => {
+    try {
+      if (!db) throw new Error('Firebase not configured');
+      const querySnapshot = await getDocs(collection(db, 'materials'));
+      const books: Textbook[] = [];
+      querySnapshot.forEach((doc) => {
+        books.push({ id: doc.id, ...doc.data() } as Textbook);
+      });
+      const sortedBooks = books.sort((a, b) => {
+        const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : (a.createdAt || 0));
+        const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : (b.createdAt || 0));
+        return bTime - aTime;
+      });
+      setMaterials(sortedBooks);
+    } catch (err) {
+      console.warn("Firebase error in App.tsx, falling back to localStorage:", err);
+      const localBooks = localStorage.getItem('materials');
+      if (localBooks) {
+        try {
+          const parsed = JSON.parse(localBooks);
+          const sortedBooks = parsed.sort((a: any, b: any) => (b.createdAt?.seconds || b.createdAt || 0) - (a.createdAt?.seconds || a.createdAt || 0));
+          setMaterials(sortedBooks);
+        } catch (e) {
+          setMaterials([]);
+        }
+      } else {
+        setMaterials([]);
+      }
+    }
+  };
 
   const loadTextbooks = async () => {
     try {
@@ -1169,6 +1208,22 @@ CRITICAL INSTRUCTIONS:
                   {language === 'zh' ? '朗读纠错' : 'Reading Coach'}
                 </span>
               </button>
+
+              <button
+                onClick={() => setAppMode('material-assistant')}
+                className="group flex flex-col items-center gap-3 transition-all duration-300 active:scale-95 relative"
+              >
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500 border border-white/10 ${
+                  appMode === 'material-assistant'
+                    ? 'bg-white text-black shadow-[0_0_50px_rgba(255,255,255,0.7)] scale-105 z-10'
+                    : 'bg-black/40 text-white hover:bg-black/60 z-0'
+                }`}>
+                  <Book className="w-7 h-7" />
+                </div>
+                <span className={`text-xs font-medium transition-colors ${appMode === 'material-assistant' ? 'text-white' : 'text-zinc-400'}`}>
+                  {language === 'zh' ? '语文素材' : 'Materials'}
+                </span>
+              </button>
             </div>
           </div>
 
@@ -1194,7 +1249,7 @@ CRITICAL INSTRUCTIONS:
           )}
 
           {/* Textbook Association Section */}
-          {appMode !== 'reading-coach' && appMode !== 'grapher' && (
+          {appMode !== 'reading-coach' && appMode !== 'grapher' && appMode !== 'material-assistant' && (
             <div className="flex items-center justify-between p-4 rounded-3xl border border-white/5 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] bg-black/20 liquid-panel">
               <div className="flex items-center gap-4">
                 {appMode === 'audio-tutor' && (
@@ -1253,6 +1308,7 @@ CRITICAL INSTRUCTIONS:
               </button>
             </div>
           )}
+
 
           <div className={appMode === 'grapher' ? 'block flex-1 flex flex-col h-full' : 'hidden'}>
             <motion.div
@@ -1555,6 +1611,23 @@ CRITICAL INSTRUCTIONS:
             </motion.div>
           </div>
 
+          <div className={appMode === 'material-assistant' ? 'block flex-1 flex flex-col' : 'hidden'}>
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="flex-1 flex flex-col"
+            >
+              <div className="flex-1 min-h-[70vh] rounded-2xl overflow-hidden border border-white/10 shadow-2xl bg-black/20 backdrop-blur-3xl liquid-panel">
+                <MaterialAssistant 
+                  lang={language} 
+                  materials={materials} 
+                  onManageMaterials={() => setShowMaterialManager(true)}
+                />
+              </div>
+            </motion.div>
+          </div>
+
           <div className={appMode === 'audio-tutor' ? 'block flex-1 flex flex-col' : 'hidden'}>
             <motion.div
               initial={{ opacity: 0, y: -20 }}
@@ -1769,6 +1842,10 @@ CRITICAL INSTRUCTIONS:
 
       {showTextbookManager && (
         <TextbookManager onClose={() => setShowTextbookManager(false)} lang={language} />
+      )}
+
+      {showMaterialManager && (
+        <TextbookManager onClose={() => setShowMaterialManager(false)} lang={language} type="material" />
       )}
     </div>
   );

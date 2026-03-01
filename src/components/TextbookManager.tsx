@@ -12,7 +12,7 @@ export interface Textbook {
   createdAt: any;
 }
 
-export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 'zh' | 'en' }) {
+export function TextbookManager({ onClose, lang, type = 'textbook' }: { onClose: () => void, lang: 'zh' | 'en', type?: 'textbook' | 'material' }) {
   const [textbooks, setTextbooks] = useState<Textbook[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -21,6 +21,11 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
   const [urlInput, setUrlInput] = useState('');
   const [urlNameInput, setUrlNameInput] = useState('');
 
+  const collectionName = type === 'material' ? 'materials' : 'textbooks';
+  const storageKey = type === 'material' ? 'materials' : 'textbooks';
+  const title = type === 'material' ? (lang === 'zh' ? '素材管理' : 'Manage Materials') : (lang === 'zh' ? '教材管理' : 'Manage Textbooks');
+  const emptyText = type === 'material' ? (lang === 'zh' ? '暂无素材' : 'No materials uploaded yet.') : (lang === 'zh' ? '暂无教材' : 'No textbooks uploaded yet.');
+
   useEffect(() => {
     loadTextbooks();
   }, []);
@@ -28,7 +33,7 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
   const loadTextbooks = async () => {
     try {
       if (!db) throw new Error('Firebase not configured');
-      const querySnapshot = await getDocs(collection(db, 'textbooks'));
+      const querySnapshot = await getDocs(collection(db, collectionName));
       const books: Textbook[] = [];
       querySnapshot.forEach((doc) => {
         books.push({ id: doc.id, ...doc.data() } as Textbook);
@@ -40,7 +45,7 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
       }));
     } catch (err: any) {
       console.warn("Firebase error, falling back to localStorage:", err);
-      const localBooks = localStorage.getItem('textbooks');
+      const localBooks = localStorage.getItem(storageKey);
       if (localBooks) {
         try {
           const parsed = JSON.parse(localBooks);
@@ -102,7 +107,7 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
 
       try {
         if (!db) throw new Error('Firebase not configured');
-        await addDoc(collection(db, 'textbooks'), {
+        await addDoc(collection(db, collectionName), {
           name: file.name,
           url: publicUrl,
           fileId: `supabase-${fileId}`,
@@ -117,9 +122,9 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
           fileId: `supabase-${fileId}`,
           createdAt: Date.now()
         };
-        const localBooks = JSON.parse(localStorage.getItem('textbooks') || '[]');
+        const localBooks = JSON.parse(localStorage.getItem(storageKey) || '[]');
         localBooks.push(newBook);
-        localStorage.setItem('textbooks', JSON.stringify(localBooks));
+        localStorage.setItem(storageKey, JSON.stringify(localBooks));
       }
 
       await loadTextbooks();
@@ -136,7 +141,7 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
 
   const handleAddUrl = async () => {
     if (!urlInput.trim() || !urlNameInput.trim()) {
-      setError(lang === 'zh' ? '请填写教材名称和链接。' : 'Please provide both name and URL.');
+      setError(lang === 'zh' ? '请填写名称和链接。' : 'Please provide both name and URL.');
       return;
     }
 
@@ -146,7 +151,7 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
     try {
       try {
         if (!db) throw new Error('Firebase not configured');
-        await addDoc(collection(db, 'textbooks'), {
+        await addDoc(collection(db, collectionName), {
           name: urlNameInput.trim() + (urlNameInput.toLowerCase().endsWith('.pdf') ? '' : '.pdf'),
           url: urlInput.trim(),
           fileId: 'url-' + Date.now(),
@@ -161,9 +166,9 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
           fileId: 'url-' + Date.now(),
           createdAt: Date.now()
         };
-        const localBooks = JSON.parse(localStorage.getItem('textbooks') || '[]');
+        const localBooks = JSON.parse(localStorage.getItem(storageKey) || '[]');
         localBooks.push(newBook);
-        localStorage.setItem('textbooks', JSON.stringify(localBooks));
+        localStorage.setItem(storageKey, JSON.stringify(localBooks));
       }
 
       setUrlInput('');
@@ -190,21 +195,21 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
       }
       
       if (book.id.startsWith('local-')) {
-        const localBooks = JSON.parse(localStorage.getItem('textbooks') || '[]');
+        const localBooks = JSON.parse(localStorage.getItem(storageKey) || '[]');
         const updatedBooks = localBooks.filter((b: any) => b.id !== book.id);
-        localStorage.setItem('textbooks', JSON.stringify(updatedBooks));
+        localStorage.setItem(storageKey, JSON.stringify(updatedBooks));
       } else {
         if (db) {
           try {
-            await deleteDoc(doc(db, 'textbooks', book.id));
+            await deleteDoc(doc(db, collectionName, book.id));
           } catch (e) {
             console.warn("Firebase delete failed:", e);
           }
         }
         // Also try to remove from localStorage just in case it was an old local book without the prefix
-        const localBooks = JSON.parse(localStorage.getItem('textbooks') || '[]');
+        const localBooks = JSON.parse(localStorage.getItem(storageKey) || '[]');
         const updatedBooks = localBooks.filter((b: any) => b.id !== book.id);
-        localStorage.setItem('textbooks', JSON.stringify(updatedBooks));
+        localStorage.setItem(storageKey, JSON.stringify(updatedBooks));
       }
       
       setTextbooks(textbooks.filter(b => b.id !== book.id));
@@ -219,7 +224,7 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
         <div className="flex items-center justify-between p-6 border-b border-white/10">
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <Book className="w-5 h-5 text-white" />
-            {lang === 'zh' ? '教材管理' : 'Manage Textbooks'}
+            {title}
           </h2>
           <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg text-zinc-400 transition-colors">
             <X className="w-5 h-5" />
@@ -263,7 +268,7 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
                   <span className="font-medium">
                     {uploading 
                       ? (lang === 'zh' ? '上传中...' : 'Uploading...') 
-                      : (lang === 'zh' ? '点击上传 PDF 教材 (最大 50MB)' : 'Click to upload PDF textbook (Max 50MB)')}
+                      : (lang === 'zh' ? '点击上传 PDF (最大 50MB)' : 'Click to upload PDF (Max 50MB)')}
                   </span>
                   <span className="text-xs text-zinc-500 text-center mt-2">
                     {lang === 'zh' 
@@ -281,7 +286,7 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
                     : 'You can upload large files directly in Supabase Storage console. Click the file, select "Get URL", and paste it below.'}
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1.5">{lang === 'zh' ? '教材名称' : 'Textbook Name'}</label>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1.5">{lang === 'zh' ? '名称' : 'Name'}</label>
                   <input 
                     type="text" 
                     value={urlNameInput || ''}
@@ -314,7 +319,7 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
 
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-4">
-              {lang === 'zh' ? '已上传的教材' : 'Uploaded Textbooks'}
+              {lang === 'zh' ? '已上传的文件' : 'Uploaded Files'}
             </h3>
             {loading ? (
               <div className="flex justify-center py-8">
@@ -322,7 +327,7 @@ export function TextbookManager({ onClose, lang }: { onClose: () => void, lang: 
               </div>
             ) : textbooks.length === 0 ? (
               <div className="text-center py-8 text-zinc-500 text-sm">
-                {lang === 'zh' ? '暂无教材' : 'No textbooks uploaded yet.'}
+                {emptyText}
               </div>
             ) : (
               textbooks.map(book => (
