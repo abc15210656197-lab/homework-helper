@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Mic, Square, Play, RefreshCw, BookOpen, CheckCircle, AlertCircle, FileText, Plus, Loader2, ChevronDown } from 'lucide-react';
 import { GoogleGenAI, Type, Modality } from '@google/genai';
 import ReactMarkdown from 'react-markdown';
+import { addWavHeader } from '../utils/audioUtils';
 
 const ARTICLES: {
   id: string;
@@ -370,7 +371,9 @@ IMPORTANT:
       const mimeType = part?.inlineData?.mimeType || 'audio/mpeg';
 
       if (base64Audio) {
-        const audioUrl = `data:${mimeType};base64,${base64Audio}`;
+        // Ensure the audio has a WAV header for HTML5 audio player compatibility
+        const processedAudio = addWavHeader(base64Audio, 24000);
+        const audioUrl = `data:audio/wav;base64,${processedAudio}`;
         setStandardAudioUrl(audioUrl);
       }
     } catch (err) {

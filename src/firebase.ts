@@ -17,7 +17,7 @@ let storage: ReturnType<typeof getStorage> | null = null;
 if (firebaseConfig.apiKey) {
   app = initializeApp(firebaseConfig);
   // Use initializeFirestore with experimentalForceLongPolling to improve proxy compatibility
-  db = initializeFirestore(app, { experimentalForceLongPolling: true }, 'textbook');
+  db = initializeFirestore(app, { experimentalForceLongPolling: true });
   
   if (firebaseConfig.storageBucket) {
     storage = getStorage(app);

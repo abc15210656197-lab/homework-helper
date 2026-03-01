@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { GoogleGenAI, Modality } from '@google/genai';
+import { GoogleGenAI, Modality, Type } from '@google/genai';
 import { Mic, Loader2, Upload, AlertCircle, Play, Pause, X, FileImage, Trash2, StopCircle, Camera } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
@@ -8,6 +8,7 @@ import remarkBreaks from 'remark-breaks';
 import rehypeKatex from 'rehype-katex';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TRANSLATIONS } from '../constants';
+import { addWavHeader } from '../utils/audioUtils';
 
 import { Textbook } from './TextbookManager';
 
@@ -16,6 +17,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 function LiveQnA({ imageBase64, mimeType, lang }: { imageBase64: string, mimeType: string, lang: 'zh' | 'en' }) {
   const t = TRANSLATIONS[lang];
   const [isLive, setIsLive] = useState(false);
+  const isLiveRef = useRef(false);
   const [status, setStatus] = useState('');
   const audioContextRef = useRef<AudioContext | null>(null);
   const sessionRef = useRef<any>(null);
@@ -26,24 +28,33 @@ function LiveQnA({ imageBase64, mimeType, lang }: { imageBase64: string, mimeTyp
   const startLive = async () => {
     try {
       setStatus(t.startLive + '...');
-      audioContextRef.current = new AudioContext({ sampleRate: 16000 });
+      const audioContext = new AudioContext({ sampleRate: 16000 });
+      audioContextRef.current = audioContext;
+      
+      // Resume context if suspended (common in browsers)
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
-      const source = audioContextRef.current.createMediaStreamSource(stream);
-      const processor = audioContextRef.current.createScriptProcessor(4096, 1, 1);
+      const source = audioContext.createMediaStreamSource(stream);
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
       
       source.connect(processor);
-      processor.connect(audioContextRef.current.destination);
+      processor.connect(audioContext.destination);
       
-      const sessionPromise = ai.live.connect({
+      const aiInstance = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const sessionPromise = aiInstance.live.connect({
         model: "gemini-2.5-flash-native-audio-preview-09-2025",
         config: {
           responseModalities: [Modality.AUDIO],
-          systemInstruction: "You are a helpful tutor. The user is asking questions about a homework problem. Be concise and conversational.",
+          systemInstruction: `You are a helpful tutor. The user is asking questions about a homework problem. Be concise and conversational. You can see the homework problem in the image provided. Respond in ${lang === 'zh' ? 'Chinese' : 'English'}.`,
         },
         callbacks: {
           onopen: () => {
             setIsLive(true);
+            isLiveRef.current = true;
             setStatus(t.listening);
             sessionPromise.then(session => {
                session.sendRealtimeInput({
@@ -59,20 +70,28 @@ function LiveQnA({ imageBase64, mimeType, lang }: { imageBase64: string, mimeTyp
               });
               activeSourcesRef.current = [];
             }
-            const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
-            if (base64Audio) {
-              setStatus(t.speaking);
-              playAudio(base64Audio);
+            
+            // Handle audio parts
+            const parts = message.serverContent?.modelTurn?.parts;
+            if (parts) {
+              for (const part of parts) {
+                if (part.inlineData?.data) {
+                  setStatus(t.speaking);
+                  playAudio(part.inlineData.data);
+                }
+              }
             }
           },
           onclose: () => {
             setIsLive(false);
+            isLiveRef.current = false;
             setStatus('');
             stopAll();
           },
           onerror: (e: any) => {
-            console.error(e);
+            console.error("Live API Error:", e);
             setIsLive(false);
+            isLiveRef.current = false;
             setStatus('Error');
             stopAll();
           }
@@ -82,7 +101,7 @@ function LiveQnA({ imageBase64, mimeType, lang }: { imageBase64: string, mimeTyp
       sessionRef.current = sessionPromise;
       
       processor.onaudioprocess = (e) => {
-        if (!isLive) return;
+        if (!isLiveRef.current) return;
         const inputData = e.inputBuffer.getChannelData(0);
         const pcm16 = new Int16Array(inputData.length);
         for (let i = 0; i < inputData.length; i++) {
@@ -96,7 +115,7 @@ function LiveQnA({ imageBase64, mimeType, lang }: { imageBase64: string, mimeTyp
         });
       };
     } catch (e) {
-      console.error(e);
+      console.error("Mic/Audio Error:", e);
       setStatus('Error starting mic');
     }
   };
@@ -136,6 +155,7 @@ function LiveQnA({ imageBase64, mimeType, lang }: { imageBase64: string, mimeTyp
   };
 
   const stopAll = () => {
+    isLiveRef.current = false;
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop());
     }
@@ -181,6 +201,14 @@ function LiveQnA({ imageBase64, mimeType, lang }: { imageBase64: string, mimeTyp
   );
 }
 
+interface QuestionData {
+  id: string;
+  title: string;
+  explanation: string;
+  audioBase64?: string;
+  isGeneratingAudio?: boolean;
+}
+
 export function AudioTutorView({ 
   files, 
   setFiles, 
@@ -198,11 +226,16 @@ export function AudioTutorView({
 }) {
   const t = TRANSLATIONS[lang];
   const [state, setState] = useState<'idle' | 'uploading' | 'generating' | 'done'>('idle');
-  const [data, setData] = useState<{ text: string, audioBase64: string, imageBase64: string, mimeType: string } | null>(null);
+  const [data, setData] = useState<{ 
+    overallExplanation: string, 
+    questions: QuestionData[], 
+    imageBase64: string, 
+    mimeType: string 
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const audioRefs = useRef<Record<string, HTMLAudioElement>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -263,10 +296,44 @@ export function AudioTutorView({
 
       if (textbookParts.length > 0) {
         parts.push(...textbookParts);
-        parts.push({ text: "Please use the provided PDF textbooks as context to explain the question in the image." });
+        parts.push({ text: lang === 'zh' ? "请使用提供的 PDF 教材作为背景知识来解释图片中的问题。" : "Please use the provided PDF textbooks as context to explain the question in the image." });
       }
 
-      parts.push({ text: t.audioTutorPrompt });
+      parts.push({ text: lang === 'zh' ? `请分析提供的图片。其中包含一个或多个作业题目。
+      1. 提供内容的简要总体总结。
+      2. 识别每个单独的问题并为每个问题提供详细解释。
+      
+      请使用中文 (Chinese) 回答。
+      
+      以 JSON 格式返回结果：
+      {
+        "overallExplanation": "简要总结...",
+        "questions": [
+          {
+            "id": "q1",
+            "title": "问题 1",
+            "explanation": "问题 1 的详细解释..."
+          },
+          ...
+        ]
+      }` : `Please analyze the provided image. It contains one or more homework questions. 
+      1. Provide a brief overall summary of the content.
+      2. Identify each individual question and provide a detailed explanation for each.
+      
+      Please respond in English.
+
+      Return the result in JSON format:
+      {
+        "overallExplanation": "Brief summary...",
+        "questions": [
+          {
+            "id": "q1",
+            "title": "Question 1",
+            "explanation": "Detailed explanation for question 1..."
+          },
+          ...
+        ]
+      }` });
 
       const textResponse = await ai.models.generateContent({
         model: 'gemini-3-pro-preview',
@@ -274,14 +341,69 @@ export function AudioTutorView({
           {
             parts: parts
           }
-        ]
+        ],
+        config: {
+          systemInstruction: `You are a professional tutor. Analyze the homework image and provide explanations. 
+          CRITICAL: You MUST respond in ${lang === 'zh' ? 'Chinese (Simplified)' : 'English'}. 
+          All explanations, summaries, and titles must be in ${lang === 'zh' ? 'Chinese' : 'English'}.`,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              overallExplanation: { type: Type.STRING },
+              questions: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    id: { type: Type.STRING },
+                    title: { type: Type.STRING },
+                    explanation: { type: Type.STRING }
+                  },
+                  required: ["id", "title", "explanation"]
+                }
+              }
+            },
+            required: ["overallExplanation", "questions"]
+          }
+        }
       });
       
-      const explanationText = textResponse.text || '';
+      const result = JSON.parse(textResponse.text || '{}');
       
+      setData({ 
+        overallExplanation: result.overallExplanation || '', 
+        questions: result.questions || [], 
+        imageBase64: base64Data, 
+        mimeType: f.type 
+      });
+      setState('done');
+      
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message);
+      setState('idle');
+    }
+  };
+
+  const generateAudioForQuestion = async (questionId: string) => {
+    if (!data) return;
+    const question = data.questions.find(q => q.id === questionId);
+    if (!question || question.audioBase64) return;
+
+    // Update state to show loading
+    setData(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        questions: prev.questions.map(q => q.id === questionId ? { ...q, isGeneratingAudio: true } : q)
+      };
+    });
+
+    try {
       const audioResponse = await ai.models.generateContent({
         model: "gemini-2.5-flash-preview-tts",
-        contents: [{ parts: [{ text: explanationText }] }],
+        contents: [{ parts: [{ text: question.explanation }] }],
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
@@ -293,27 +415,42 @@ export function AudioTutorView({
       });
       
       const audioBase64 = audioResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-      
-      if (!audioBase64) throw new Error('Failed to generate audio');
-      
-      setData({ text: explanationText, audioBase64, imageBase64: base64Data, mimeType: f.type });
-      setState('done');
-      
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message);
-      setState('idle');
+      if (audioBase64) {
+        const processedAudio = addWavHeader(audioBase64, 24000);
+        setData(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            questions: prev.questions.map(q => q.id === questionId ? { ...q, audioBase64: processedAudio, isGeneratingAudio: false } : q)
+          };
+        });
+      }
+    } catch (err) {
+      console.error("Failed to generate audio for question", err);
+      setData(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          questions: prev.questions.map(q => q.id === questionId ? { ...q, isGeneratingAudio: false } : q)
+        };
+      });
     }
   };
 
-  const togglePlay = () => {
-    if (audioRef.current) {
-      if (isPlaying) {
-        audioRef.current.pause();
+  const togglePlay = (id: string) => {
+    const audio = audioRefs.current[id];
+    if (audio) {
+      if (playingAudioId === id) {
+        audio.pause();
+        setPlayingAudioId(null);
       } else {
-        audioRef.current.play();
+        // Stop other playing audio
+        if (playingAudioId && audioRefs.current[playingAudioId]) {
+          audioRefs.current[playingAudioId].pause();
+        }
+        audio.play();
+        setPlayingAudioId(id);
       }
-      setIsPlaying(!isPlaying);
     }
   };
 
@@ -322,6 +459,7 @@ export function AudioTutorView({
     setData(null);
     setState('idle');
     setError(null);
+    setPlayingAudioId(null);
   };
 
   if (state === 'uploading' || state === 'generating') {
@@ -332,7 +470,7 @@ export function AudioTutorView({
           {state === 'uploading' ? t.uploading : t.generating}
         </h3>
         <p className="text-zinc-400 text-sm">
-          {state === 'generating' ? (lang === 'zh' ? '正在为您生成专属语音讲解...' : 'Generating your personalized audio explanation...') : ''}
+          {state === 'generating' ? (lang === 'zh' ? '正在为您深度解析题目...' : 'Analyzing questions in depth...') : ''}
         </p>
       </div>
     );
@@ -356,22 +494,6 @@ export function AudioTutorView({
             <div className="w-full max-w-md aspect-video bg-zinc-900 rounded-xl overflow-hidden border border-white/10">
               <img src={`data:${data.mimeType};base64,${data.imageBase64}`} alt="Question" className="w-full h-full object-contain" />
             </div>
-            
-            <audio 
-              ref={audioRef} 
-              src={`data:audio/wav;base64,${data.audioBase64}`} 
-              onEnded={() => setIsPlaying(false)}
-              onPause={() => setIsPlaying(false)}
-              onPlay={() => setIsPlaying(true)}
-              className="hidden"
-            />
-            
-            <button 
-              onClick={togglePlay}
-              className="w-20 h-20 bg-white rounded-full flex items-center justify-center hover:bg-zinc-200 transition-all shadow-[0_0_40px_rgba(255,255,255,0.5)] active:scale-95"
-            >
-              {isPlaying ? <Pause className="w-8 h-8 text-black" /> : <Play className="w-8 h-8 text-black ml-1" />}
-            </button>
           </div>
         </div>
 
@@ -380,10 +502,50 @@ export function AudioTutorView({
             <FileImage className="w-5 h-5 text-white" />
             {t.textContent}
           </h3>
-          <div className="prose prose-invert prose-zinc max-w-none text-zinc-300 leading-relaxed">
+          <div className="prose prose-invert prose-zinc max-w-none text-zinc-300 leading-relaxed mb-8">
             <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} rehypePlugins={[rehypeKatex]}>
-              {data.text}
+              {data.overallExplanation}
             </ReactMarkdown>
+          </div>
+
+          <div className="space-y-8">
+            {data.questions.map((q) => (
+              <div key={q.id} className="p-6 rounded-xl bg-white/5 border border-white/10 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-lg font-bold text-white">{q.title}</h4>
+                  <div className="flex items-center gap-3">
+                    {q.audioBase64 ? (
+                      <button 
+                        onClick={() => togglePlay(q.id)}
+                        className="w-12 h-12 bg-white rounded-full flex items-center justify-center hover:bg-zinc-200 transition-all shadow-lg active:scale-95"
+                      >
+                        {playingAudioId === q.id ? <Pause className="w-5 h-5 text-black" /> : <Play className="w-5 h-5 text-black ml-0.5" />}
+                        <audio 
+                          ref={el => { if (el) audioRefs.current[q.id] = el; }}
+                          src={`data:audio/wav;base64,${q.audioBase64}`} 
+                          onEnded={() => setPlayingAudioId(null)}
+                          className="hidden"
+                        />
+                      </button>
+                    ) : (
+                      <button 
+                        onClick={() => generateAudioForQuestion(q.id)}
+                        disabled={q.isGeneratingAudio}
+                        className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs transition-colors flex items-center gap-2"
+                      >
+                        {q.isGeneratingAudio ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+                        {lang === 'zh' ? '生成语音讲解' : 'Generate Audio'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="prose prose-invert prose-zinc max-w-none text-zinc-400 text-sm leading-relaxed">
+                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} rehypePlugins={[rehypeKatex]}>
+                    {q.explanation}
+                  </ReactMarkdown>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
