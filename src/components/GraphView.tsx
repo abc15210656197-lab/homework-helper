@@ -1,13 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { evaluate } from 'mathjs';
+import { Save, RotateCcw } from 'lucide-react';
 
 interface GraphViewProps {
   functions: { expression: string; color: string }[];
   parameters?: Record<string, { value: number }>;
+  onSave?: () => void;
 }
 
-const GraphView: React.FC<GraphViewProps> = ({ functions, parameters = {} }) => {
+const GraphView: React.FC<GraphViewProps> = ({ functions, parameters = {}, onSave }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -253,12 +255,21 @@ const GraphView: React.FC<GraphViewProps> = ({ functions, parameters = {} }) => 
     <div ref={containerRef} className="w-full h-full bg-zinc-950 rounded-2xl shadow-inner overflow-hidden border border-white/10 cursor-crosshair relative">
       <svg ref={svgRef} className="w-full h-full" />
       <div className="absolute bottom-4 right-4 flex flex-col gap-2">
+        {onSave && (
+          <button 
+            onClick={onSave}
+            className="bg-zinc-900/90 backdrop-blur p-2.5 rounded-xl shadow-lg border border-white/10 text-zinc-400 hover:bg-zinc-800 hover:text-white transition-all active:scale-95"
+            title="Save to History"
+          >
+            <Save className="w-5 h-5" />
+          </button>
+        )}
         <button 
           onClick={resetView}
           className="bg-zinc-900/90 backdrop-blur p-2.5 rounded-xl shadow-lg border border-white/10 text-zinc-400 hover:bg-zinc-800 hover:text-white transition-all active:scale-95"
           title="Reset View"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          <RotateCcw className="w-5 h-5" />
         </button>
       </div>
     </div>

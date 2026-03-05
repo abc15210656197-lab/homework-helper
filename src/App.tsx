@@ -1,24 +1,25 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import rehypeKatex from 'rehype-katex';
-import { Upload, Copy, Check, FileImage, Loader2, Trash2, AlertCircle, Camera, ArrowLeft, Info, BookOpen, ChevronRight, MessageCircle, Mic, Send, ChevronLeft, Maximize2, X, Book, FileText, Headphones, LineChart, Plus, Edit2, Palette, Globe, Keyboard, Image as ImageIcon, RefreshCw } from 'lucide-react';
+import { Upload, Copy, Check, FileImage, Loader2, Trash2, AlertCircle, Camera, ArrowLeft, Info, BookOpen, ChevronRight, MessageCircle, Mic, Send, ChevronLeft, Maximize2, X, Book, FileText, Headphones, LineChart, Plus, Edit2, Palette, Globe, Keyboard, Image as ImageIcon, RefreshCw, Clock, Folder, LogIn, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { InlineMath } from 'react-katex';
 import 'katex/dist/katex.min.css';
 
 import { MODELS, TRANSLATIONS } from './constants';
 import { AudioTutorView } from './components/AudioTutor';
-import { TextbookManager, Textbook } from './components/TextbookManager';
+import { TextbookManager, Textbook, TextbookGroup } from './components/TextbookManager';
 import { ReadingCoach } from './components/ReadingCoach';
 import GraphView from './components/GraphView';
 import MathKeyboard from './components/MathKeyboard';
 import { extractFunctionsFromImage, GraphScanMode } from './services/graphService';
 import { collection, getDocs } from 'firebase/firestore';
-import { db } from './firebase';
+import { db, auth } from './firebase';
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User } from 'firebase/auth';
 import * as math from 'mathjs';
 
 import { MaterialAssistant } from './components/MaterialAssistant';
@@ -49,15 +50,27 @@ interface QuestionData {
   precautions: string;
 }
 
-function ChatBox({ data, model, setModel, lang, textbooks }: { data: QuestionData, model: string, setModel: (m: string) => void, lang: 'zh' | 'en', textbooks: Textbook[] }) {
+function ChatBox({ data, model, setModel, lang, textbooks, groups }: { data: QuestionData, model: string, setModel: (m: string) => void, lang: 'zh' | 'en', textbooks: Textbook[], groups: TextbookGroup[] }) {
   const [messages, setMessages] = useState<{role: 'user' | 'model', text: string}[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [selectedChatTextbookIds, setSelectedChatTextbookIds] = useState<string[]>([]);
+  const [showTextbookDropdown, setShowTextbookDropdown] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const t = TRANSLATIONS[lang];
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowTextbookDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     setMessages([]);
@@ -192,43 +205,164 @@ CRITICAL INSTRUCTIONS:
   const ChatContent = (
     <div className={`flex flex-col ${isFullScreen ? 'h-full' : ''}`}>
       <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
+        <div 
+          className="flex items-center gap-2 cursor-pointer group/header"
+          onClick={() => textbooks.length > 0 && setShowTextbookDropdown(!showTextbookDropdown)}
+        >
           <div className="p-1.5 bg-white/10 rounded-lg ring-1 ring-white/20">
             <MessageCircle className="w-4 h-4 text-white" />
           </div>
-          <h4 className="font-semibold text-sm text-white tracking-tight">{t.aiChat}</h4>
+          <h4 className="font-semibold text-sm text-white tracking-tight group-hover/header:text-emerald-400 transition-colors">{t.aiChat}</h4>
+          {textbooks.length > 0 && (
+            <span className="text-[10px] text-zinc-500 bg-white/5 px-2 py-0.5 rounded-full border border-white/5">
+              {lang === 'zh' ? `已关联 ${selectedChatTextbookIds.length} 本` : `${selectedChatTextbookIds.length} linked`}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {textbooks.length > 0 && (
-            <div className="relative group/dropdown">
-              <button className="bg-black/40 hover:bg-white/5 border border-white/10 text-zinc-300 text-[10px] rounded-full px-3 py-1.5 outline-none focus:ring-1 focus:ring-white cursor-pointer backdrop-blur-md max-w-[140px] truncate flex items-center gap-1.5 transition-all">
-                <Book className="w-3 h-3" />
+            <div className="relative" ref={dropdownRef}>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowTextbookDropdown(!showTextbookDropdown);
+                }}
+                className={`bg-black/40 hover:bg-white/5 border border-white/10 text-zinc-300 text-[10px] rounded-full px-3 py-1.5 outline-none focus:ring-1 focus:ring-white cursor-pointer backdrop-blur-md max-w-[140px] truncate flex items-center gap-1.5 transition-all ${showTextbookDropdown ? 'ring-1 ring-white bg-white/10' : ''}`}
+              >
+                <Folder className="w-3 h-3" />
                 {selectedChatTextbookIds.length === 0 
                   ? (lang === 'zh' ? '不关联教材' : 'No textbook') 
-                  : (lang === 'zh' ? `已关联 ${selectedChatTextbookIds.length} 本教材` : `${selectedChatTextbookIds.length} textbooks`)}
+                  : (lang === 'zh' ? `选择教材` : `Select Books`)}
               </button>
-              <div className="absolute right-0 top-full mt-1 w-48 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl opacity-0 invisible group-hover/dropdown:opacity-100 group-hover/dropdown:visible transition-all z-50 p-2 flex flex-col gap-1 max-h-48 overflow-y-auto custom-scrollbar">
-                {textbooks.map(book => {
-                  const isSelected = selectedChatTextbookIds.includes(book.id);
-                  return (
-                    <button
-                      key={book.id}
-                      onClick={() => {
-                        if (isSelected) {
-                          setSelectedChatTextbookIds(prev => prev.filter(id => id !== book.id));
-                        } else {
-                          setSelectedChatTextbookIds(prev => [...prev, book.id]);
-                        }
-                      }}
-                      className={`text-left px-2 py-1.5 text-xs rounded-md transition-colors ${
-                        isSelected ? 'bg-white text-black shadow-[0_0_10px_rgba(255,255,255,0.3)]' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
-                      }`}
-                    >
-                      <div className="truncate">{book.name}</div>
-                    </button>
-                  );
-                })}
-              </div>
+              
+              <AnimatePresence>
+                {showTextbookDropdown && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    className="absolute right-0 top-full mt-2 w-56 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl z-50 p-2 flex flex-col gap-1 max-h-64 overflow-y-auto custom-scrollbar backdrop-blur-xl"
+                  >
+                    <div className="px-2 py-1.5 mb-1 border-b border-white/5 flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                        {lang === 'zh' ? '选择关联教材' : 'Select Textbooks'}
+                      </span>
+                      <button 
+                        onClick={() => setSelectedChatTextbookIds(selectedChatTextbookIds.length === textbooks.length ? [] : textbooks.map(b => b.id))}
+                        className="text-[10px] text-blue-400 hover:text-blue-300"
+                      >
+                        {selectedChatTextbookIds.length === textbooks.length ? (lang === 'zh' ? '取消全选' : 'Deselect All') : (lang === 'zh' ? '全选' : 'Select All')}
+                      </button>
+                    </div>
+                    
+                    {/* Render Groups */}
+                    {groups.map(group => {
+                      const groupBooks = textbooks.filter(b => b.groupId === group.id);
+                      if (groupBooks.length === 0) return null;
+                      const allGroupSelected = groupBooks.every(b => selectedChatTextbookIds.includes(b.id));
+                      
+                      return (
+                        <div key={group.id} className="mb-2">
+                          <div className="flex items-center justify-between px-2 py-1 mb-1">
+                            <span className="text-[10px] font-bold text-zinc-400 flex items-center gap-1">
+                              <Folder className="w-3 h-3" />
+                              {group.name}
+                            </span>
+                            <button 
+                              onClick={() => {
+                                if (allGroupSelected) {
+                                  setSelectedChatTextbookIds(prev => prev.filter(id => !groupBooks.find(b => b.id === id)));
+                                } else {
+                                  const newIds = [...selectedChatTextbookIds];
+                                  groupBooks.forEach(b => {
+                                    if (!newIds.includes(b.id)) newIds.push(b.id);
+                                  });
+                                  setSelectedChatTextbookIds(newIds);
+                                }
+                              }}
+                              className="text-[9px] text-zinc-500 hover:text-white"
+                            >
+                              {allGroupSelected ? (lang === 'zh' ? '取消' : 'None') : (lang === 'zh' ? '全选' : 'All')}
+                            </button>
+                          </div>
+                          {groupBooks.map(book => {
+                            const isSelected = selectedChatTextbookIds.includes(book.id);
+                            return (
+                              <button
+                                key={book.id}
+                                onClick={() => {
+                                  if (isSelected) {
+                                    setSelectedChatTextbookIds(prev => prev.filter(id => id !== book.id));
+                                  } else {
+                                    setSelectedChatTextbookIds(prev => [...prev, book.id]);
+                                  }
+                                }}
+                                className={`w-full text-left px-3 py-1.5 text-xs rounded-lg transition-all flex items-center justify-between group ${
+                                  isSelected ? 'bg-white/10 text-white font-medium' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+                                }`}
+                              >
+                                <span className="truncate flex-1 mr-2">{book.name}</span>
+                                {isSelected && <Check className="w-3 h-3 shrink-0 text-white" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+
+                    {/* Render Ungrouped */}
+                    {textbooks.filter(b => !b.groupId).length > 0 && (
+                      <div className="mb-2">
+                        <div className="flex items-center justify-between px-2 py-1 mb-1">
+                          <span className="text-[10px] font-bold text-zinc-400 flex items-center gap-1">
+                            <Folder className="w-3 h-3" />
+                            {lang === 'zh' ? '未分组' : 'Ungrouped'}
+                          </span>
+                          <button 
+                            onClick={() => {
+                              const ungroupedBooks = textbooks.filter(b => !b.groupId);
+                              const allUngroupedSelected = ungroupedBooks.every(b => selectedChatTextbookIds.includes(b.id));
+                              if (allUngroupedSelected) {
+                                setSelectedChatTextbookIds(prev => prev.filter(id => !ungroupedBooks.find(b => b.id === id)));
+                              } else {
+                                const newIds = [...selectedChatTextbookIds];
+                                ungroupedBooks.forEach(b => {
+                                  if (!newIds.includes(b.id)) newIds.push(b.id);
+                                });
+                                setSelectedChatTextbookIds(newIds);
+                              }
+                            }}
+                            className="text-[9px] text-zinc-500 hover:text-white"
+                          >
+                            {textbooks.filter(b => !b.groupId).every(b => selectedChatTextbookIds.includes(b.id)) ? (lang === 'zh' ? '取消' : 'None') : (lang === 'zh' ? '全选' : 'All')}
+                          </button>
+                        </div>
+                        {textbooks.filter(b => !b.groupId).map(book => {
+                          const isSelected = selectedChatTextbookIds.includes(book.id);
+                          return (
+                            <button
+                              key={book.id}
+                              onClick={() => {
+                                if (isSelected) {
+                                  setSelectedChatTextbookIds(prev => prev.filter(id => id !== book.id));
+                                } else {
+                                  setSelectedChatTextbookIds(prev => [...prev, book.id]);
+                                }
+                              }}
+                              className={`w-full text-left px-3 py-1.5 text-xs rounded-lg transition-all flex items-center justify-between group ${
+                                isSelected ? 'bg-white/10 text-white font-medium' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+                              }`}
+                            >
+                              <span className="truncate flex-1 mr-2">{book.name}</span>
+                              {isSelected && <Check className="w-3 h-3 shrink-0 text-white" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           )}
           <select 
@@ -343,15 +477,104 @@ CRITICAL INSTRUCTIONS:
 }
 
 function QuestionDetail({ 
-  data, onBack, onNext, onPrev, hasNext, hasPrev, model, setModel, lang, textbooks 
+  data, onBack, onNext, onPrev, hasNext, hasPrev, model, setModel, lang, textbooks, groups,
+  allQuestions, currentIndex, onSelectQuestion
 }: { 
-  data: QuestionData; onBack: () => void; onNext: () => void; onPrev: () => void; hasNext: boolean; hasPrev: boolean; model: string; setModel: (m: string) => void; lang: 'zh' | 'en'; textbooks: Textbook[];
+  data: QuestionData; onBack: () => void; onNext: () => void; onPrev: () => void; hasNext: boolean; hasPrev: boolean; model: string; setModel: (m: string) => void; lang: 'zh' | 'en'; textbooks: Textbook[]; groups: TextbookGroup[];
+  allQuestions?: QuestionData[]; currentIndex?: number; onSelectQuestion?: (index: number) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [touchStart, setTouchStart] = useState<{x: number, y: number} | null>(null);
   const [touchEnd, setTouchEnd] = useState<{x: number, y: number} | null>(null);
   const [fullScreenPanel, setFullScreenPanel] = useState<'question' | 'explanation' | 'precautions' | 'answer' | null>(null);
   const t = TRANSLATIONS[lang];
+
+  const [subQ, setSubQ] = useState<string | null>(null);
+  const [subSubQ, setSubSubQ] = useState<string | null>(null);
+
+  const structure = useMemo(() => {
+    const s: { label: string, children: string[] }[] = [];
+    // Match (1), (2) or 1., 2.
+    const regex1 = /(?:^|\s)(\(\d+\)|\d+\.)(?=\s|$)/g;
+    let match;
+    const matches: { label: string, index: number }[] = [];
+    
+    let tempText = data.question;
+    while ((match = regex1.exec(tempText)) !== null) {
+      matches.push({ label: match[1], index: match.index });
+    }
+
+    if (matches.length > 0) {
+      matches.forEach((m, i) => {
+        const next = matches[i+1];
+        const content = data.question.slice(m.index, next ? next.index : undefined);
+        const children: string[] = [];
+        // Look for a. b. c.
+        const regex2 = /(?:^|\s)([a-z])\.(?=\s)/g;
+        let m2;
+        while ((m2 = regex2.exec(content)) !== null) {
+          children.push(m2[1]);
+        }
+        s.push({ label: m.label, children });
+      });
+    }
+    return s;
+  }, [data.question]);
+
+  useEffect(() => {
+    if (structure.length > 0) {
+      setSubQ(structure[0].label);
+      setSubSubQ(structure[0].children.length > 0 ? structure[0].children[0] : null);
+    } else {
+      setSubQ(null);
+      setSubSubQ(null);
+    }
+  }, [structure]);
+
+  const getSegment = (text: string, l1: string | null, l2: string | null) => {
+    if (!l1 || !text) return text;
+    
+    const escapedL1 = l1.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex1 = new RegExp(`(?:^|\\s)${escapedL1}(?=\\s|$)`);
+    const match1 = text.match(regex1);
+    
+    if (!match1) return text;
+    
+    const startIndex1 = match1.index!;
+    
+    let nextL1 = '';
+    const numMatch = l1.match(/\d+/);
+    if (numMatch) {
+      const num = parseInt(numMatch[0]) + 1;
+      if (l1.includes('(')) nextL1 = `\\(${num}\\)`;
+      else nextL1 = `${num}\\.`;
+    }
+    
+    const regexNext1 = new RegExp(`(?:^|\\s)${nextL1}(?=\\s|$)`);
+    const matchNext1 = text.match(regexNext1);
+    
+    const endIndex1 = matchNext1 ? matchNext1.index : text.length;
+    
+    let content = text.slice(startIndex1, endIndex1);
+    
+    if (!l2) return content;
+    
+    const regex2 = new RegExp(`(?:^|\\s)${l2}\\.(?=\\s)`);
+    const match2 = content.match(regex2);
+    
+    if (!match2) return content;
+    
+    const startIndex2 = match2.index!;
+    
+    const nextL2Code = l2.charCodeAt(0) + 1;
+    const nextL2 = String.fromCharCode(nextL2Code);
+    const regexNext2 = new RegExp(`(?:^|\\s)${nextL2}\\.(?=\\s)`);
+    const matchNext2 = content.match(regexNext2);
+    
+    const endIndex2 = matchNext2 ? matchNext2.index : content.length;
+    
+    return content.slice(startIndex2, endIndex2);
+  };
 
   const minSwipeDistance = 50;
 
@@ -436,7 +659,7 @@ function QuestionDetail({
             }
           }}
         >
-          {formatContent(data.question)}
+          {formatContent(getSegment(data.question, subQ, subSubQ))}
         </ReactMarkdown>
       </div>
     </div>
@@ -445,7 +668,7 @@ function QuestionDetail({
   const ExplanationContent = (isFull: boolean) => (
     <div className={`prose prose-invert prose-zinc prose-xs max-w-none text-zinc-300 leading-relaxed overflow-y-auto pr-2 custom-scrollbar ${isFull ? 'flex-1' : 'max-h-64'}`}>
       <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} rehypePlugins={[rehypeKatex]}>
-        {formatContent(data.explanation)}
+        {formatContent(getSegment(data.explanation, subQ, subSubQ))}
       </ReactMarkdown>
     </div>
   );
@@ -453,7 +676,7 @@ function QuestionDetail({
   const PrecautionsContent = (isFull: boolean) => (
     <div className={`prose prose-invert prose-zinc prose-xs max-w-none text-zinc-300 leading-relaxed overflow-y-auto pr-2 custom-scrollbar ${isFull ? 'flex-1' : 'max-h-64'}`}>
       <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} rehypePlugins={[rehypeKatex]}>
-        {formatContent(data.precautions)}
+        {formatContent(getSegment(data.precautions, subQ, subSubQ))}
       </ReactMarkdown>
     </div>
   );
@@ -487,6 +710,68 @@ function QuestionDetail({
         </div>
       </div>
 
+      {allQuestions && allQuestions.length > 1 && (
+        <div className="flex items-center gap-2 overflow-x-auto p-2 mb-4 bg-white/5 rounded-xl border border-white/5 no-scrollbar">
+          {allQuestions.map((q, idx) => {
+            let label = `${idx + 1}`;
+            const match = q.question.match(/^\s*\((\d+)\)/) || q.question.match(/^\s*(\d+)\./);
+            if (match) label = match[1];
+            
+            return (
+              <button
+                key={idx}
+                onClick={() => onSelectQuestion && onSelectQuestion(idx)}
+                className={`flex-shrink-0 w-8 h-8 rounded-lg text-xs font-bold flex items-center justify-center transition-all ${
+                  idx === currentIndex 
+                    ? 'bg-white text-black shadow-lg scale-110' 
+                    : 'bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-zinc-200'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {structure.length > 0 && (
+        <div className="flex flex-col gap-2 mb-4 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="flex items-center gap-2 overflow-x-auto p-1 no-scrollbar">
+            {structure.map(s => (
+              <button
+                key={s.label}
+                onClick={() => { setSubQ(s.label); setSubSubQ(s.children.length > 0 ? s.children[0] : null); }}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                  subQ === s.label 
+                    ? 'bg-white text-black border-white shadow-lg scale-105' 
+                    : 'bg-white/5 text-zinc-400 border-white/5 hover:bg-white/10 hover:text-zinc-200'
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+          
+          {subQ && structure.find(s => s.label === subQ)?.children && structure.find(s => s.label === subQ)!.children.length > 0 && (
+             <div className="flex items-center gap-2 overflow-x-auto p-1 pl-2 ml-1 border-l-2 border-white/10 no-scrollbar animate-in fade-in slide-in-from-left-2 duration-300">
+               {structure.find(s => s.label === subQ)?.children.map(child => (
+                 <button
+                   key={child}
+                   onClick={() => setSubSubQ(child)}
+                   className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                     subSubQ === child 
+                       ? 'bg-white text-black border-white shadow-lg scale-105' 
+                       : 'bg-white/5 text-zinc-400 border-white/5 hover:bg-white/10 hover:text-zinc-200'
+                   }`}
+                 >
+                   {child}.
+                 </button>
+               ))}
+             </div>
+          )}
+        </div>
+      )}
+
       <div className="rounded-2xl border border-white/10 overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-3xl ring-1 ring-white/5 liquid-panel">
         <PanelHeader title={t.questionContent} icon={BookOpen} type="question" showCopy />
         {QuestionContent(false)}
@@ -495,7 +780,7 @@ function QuestionDetail({
       <div className="rounded-2xl border border-white/10 overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-3xl ring-1 ring-white/5 liquid-panel">
         <PanelHeader title={t.answer} icon={Check} type="answer" />
         <div className="p-4 text-zinc-200 font-medium text-lg">
-          {data.answer}
+          {getSegment(data.answer, subQ, subSubQ)}
         </div>
       </div>
 
@@ -539,7 +824,7 @@ function QuestionDetail({
         </div>
       </div>
       
-      <ChatBox data={data} model={model} setModel={setModel} lang={lang} textbooks={textbooks} />
+      <ChatBox data={data} model={model} setModel={setModel} lang={lang} textbooks={textbooks} groups={groups} />
 
       <AnimatePresence>
         {fullScreenPanel && (
@@ -694,8 +979,154 @@ function BackgroundLines() {
   );
 }
 
+import { HistoryDrawer } from './components/HistoryDrawer';
+
 export default function App() {
   const [appMode, setAppMode] = useState<'extractor' | 'audio-tutor' | 'reading-coach' | 'grapher' | 'material-assistant'>('extractor');
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+
+  const adminEmail = 'abc15210656197@gmail.com';
+  const isAdmin = user?.email === adminEmail;
+
+  useEffect(() => {
+    if (!auth) {
+      setIsAuthLoading(false);
+      return;
+    }
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setIsAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleLogin = async () => {
+    if (!auth) return;
+    const provider = new GoogleAuthProvider();
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error('Login failed:', error);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (!auth) return;
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  };
+
+  const saveHistory = async (module: string, summary: string, content: any, file?: File | { base64: string, mimeType: string }) => {
+    if (!user) return;
+    
+    let imageUrl = null;
+    let imageFileId = null;
+
+    if (file) {
+      try {
+        const formData = new FormData();
+        if (file instanceof File) {
+          formData.append('file', file);
+        } else {
+          const res = await fetch(`data:${file.mimeType};base64,${file.base64}`);
+          const blob = await res.blob();
+          formData.append('file', blob, 'image.jpg');
+        }
+
+        const uploadRes = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          imageUrl = uploadData.url;
+          imageFileId = uploadData.fileId;
+        }
+      } catch (e) {
+        console.error('Failed to upload image for history', e);
+      }
+    }
+
+    try {
+      await fetch('/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          module,
+          summary,
+          content,
+          imageUrl,
+          imageFileId,
+          uid: user.uid
+        })
+      });
+    } catch (e) {
+      console.error('Failed to save history', e);
+    }
+  };
+
+  const handleSelectHistoryRecord = async (record: any) => {
+    setIsHistoryOpen(false);
+    try {
+      const content = JSON.parse(record.content);
+      if (record.module === 'extractor') {
+        setAppMode('extractor');
+        setQuestions(content.questions || []);
+        if (content.questions && content.questions.length > 0) {
+          setSelectedIdx(0);
+        }
+
+        // Restore image if available
+        if (record.image_url) {
+          setPreviewUrls([record.image_url]);
+          try {
+            const response = await fetch(record.image_url);
+            const blob = await response.blob();
+            const file = new File([blob], "restored_image.jpg", { type: blob.type });
+            setFiles([file]);
+          } catch (err) {
+            console.error('Failed to restore image file', err);
+          }
+        } else {
+          setFiles([]);
+          setPreviewUrls([]);
+        }
+      } else if (record.module === 'audio-tutor') {
+        setAppMode('audio-tutor');
+        // Audio tutor restoration logic would go here if needed
+      } else if (record.module === 'reading-coach') {
+        setAppMode('reading-coach');
+        // Reading coach restoration logic
+      } else if (record.module === 'grapher') {
+        setAppMode('grapher');
+        if (content.functions) setGraphFunctions(content.functions);
+        if (content.parameters) setGraphParameters(content.parameters);
+      } else if (record.module === 'material-assistant') {
+        setAppMode('material-assistant');
+        // Material assistant restoration logic
+      }
+    } catch (e) {
+      console.error('Failed to parse history content', e);
+    }
+  };
+
+  const handleSaveGraph = async () => {
+    if (graphFunctions.length === 0) return;
+    const summary = graphFunctions.map(f => f.expression).join(', ').substring(0, 50) + (graphFunctions.length > 1 ? '...' : '');
+    const content = JSON.stringify({
+      functions: graphFunctions,
+      parameters: graphParameters
+    });
+    
+    await saveHistory('grapher', summary, content, undefined);
+  };
+
   const [files, setFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [questions, setQuestions] = useState<QuestionData[]>([]);
@@ -711,7 +1142,9 @@ export default function App() {
   const [showTextbookManager, setShowTextbookManager] = useState(false);
   const [showMaterialManager, setShowMaterialManager] = useState(false);
   const [textbooks, setTextbooks] = useState<Textbook[]>([]);
+  const [textbookGroups, setTextbookGroups] = useState<TextbookGroup[]>([]);
   const [materials, setMaterials] = useState<Textbook[]>([]);
+  const [materialGroups, setMaterialGroups] = useState<TextbookGroup[]>([]);
   const [selectedTextbookIds, setSelectedTextbookIds] = useState<string[]>([]);
   const [associateTextbook, setAssociateTextbook] = useState(false);
 
@@ -897,6 +1330,7 @@ export default function App() {
       setGraphScannedResults(results);
       setGraphSelectedIndices(new Set(results.map((_, i) => i)));
       setGraphIsScanning(false);
+      saveHistory('grapher', results.join(', '), { functions: results.map(r => ({ id: Math.random().toString(36).substr(2, 9), expression: r, visible: true, color: COLORS[0] })) }, { base64, mimeType: file.type });
     };
     reader.readAsDataURL(file);
   };
@@ -912,6 +1346,7 @@ export default function App() {
     setGraphScannedResults(results);
     setGraphSelectedIndices(new Set(results.map((_, i) => i)));
     setGraphIsScanning(false);
+    saveHistory('grapher', results.join(', '), { functions: results.map(r => ({ id: Math.random().toString(36).substr(2, 9), expression: r, visible: true, color: COLORS[0] })) }, graphLastImageData);
   };
 
   useEffect(() => {
@@ -923,6 +1358,7 @@ export default function App() {
   }, [showMaterialManager]);
 
   const loadMaterials = async () => {
+    await loadGroups('material');
     try {
       if (!db) throw new Error('Firebase not configured');
       const querySnapshot = await getDocs(collection(db, 'materials'));
@@ -953,7 +1389,39 @@ export default function App() {
     }
   };
 
+  const loadGroups = async (type: 'textbook' | 'material') => {
+    const groupsCollectionName = type === 'material' ? 'material_groups' : 'textbook_groups';
+    const groupsStorageKey = type === 'material' ? 'material_groups' : 'textbook_groups';
+    try {
+      if (!db) throw new Error('Firebase not configured');
+      const querySnapshot = await getDocs(collection(db, groupsCollectionName));
+      const loadedGroups: TextbookGroup[] = [];
+      querySnapshot.forEach((doc) => {
+        loadedGroups.push({ id: doc.id, ...doc.data() } as TextbookGroup);
+      });
+      const sortedGroups = loadedGroups.sort((a, b) => {
+        const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : (a.createdAt || 0));
+        const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : (b.createdAt || 0));
+        return bTime - aTime;
+      });
+      if (type === 'material') setMaterialGroups(sortedGroups);
+      else setTextbookGroups(sortedGroups);
+    } catch (err) {
+      const localGroups = localStorage.getItem(groupsStorageKey);
+      if (localGroups) {
+        try {
+          const parsed = JSON.parse(localGroups);
+          if (type === 'material') setMaterialGroups(parsed);
+          else setTextbookGroups(parsed);
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+  };
+
   const loadTextbooks = async () => {
+    await loadGroups('textbook');
     try {
       if (!db) throw new Error('Firebase not configured');
       const querySnapshot = await getDocs(collection(db, 'textbooks'));
@@ -1099,6 +1567,7 @@ CRITICAL INSTRUCTIONS:
         const parsed = JSON.parse(text);
         if (Array.isArray(parsed) && parsed.length > 0) {
           setQuestions(parsed);
+          saveHistory('extractor', parsed[0].summary, { questions: parsed }, files[0]);
         } else {
           setError(language === 'zh' ? '未识别到题目或返回格式错误。' : 'No questions identified or invalid format returned.');
         }
@@ -1115,15 +1584,55 @@ CRITICAL INSTRUCTIONS:
     <div className={`min-h-screen bg-black text-zinc-100 font-sans selection:bg-zinc-800 selection:text-white relative flex flex-col`}>
       <BackgroundLines />
       <div className={`max-w-4xl mx-auto px-4 py-4 md:py-8 relative z-10 flex-1 flex flex-col w-full`}>
-        <header className="mb-4 text-center p-3 rounded-2xl border border-white/10 backdrop-blur-2xl shadow-2xl relative shrink-0 liquid-panel">
-          <div className="absolute top-3 right-3">
+        <header className="mb-4 text-center p-3 pt-12 md:pt-3 rounded-2xl border border-white/10 backdrop-blur-2xl shadow-2xl relative shrink-0 liquid-panel">
+          <div className="absolute top-3 right-3 flex items-center gap-3">
+            {user ? (
+              <div className="flex items-center gap-2">
+                {user.photoURL && <img src={user.photoURL} alt={user.displayName || ''} className="w-6 h-6 rounded-full border border-white/20" />}
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-xs text-zinc-300 transition-colors h-6"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  {language === 'zh' ? '注销' : 'Logout'}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handleLogin}
+                className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-xs text-zinc-300 transition-colors h-6"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                {language === 'zh' ? '登录' : 'Login'}
+              </button>
+            )}
             <button
-              onClick={() => setLanguage(prev => prev === 'zh' ? 'en' : 'zh')}
-              className="px-2 py-1 bg-white/10 hover:bg-white/20 border border-white/10 rounded-md text-[10px] font-bold text-zinc-300 transition-all flex items-center gap-1"
+              onClick={() => setIsHistoryOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-xs text-zinc-300 transition-colors h-6"
             >
-              <span className="text-white">🌐</span>
-              {language === 'zh' ? 'EN' : '中文'}
+              <Clock className="w-3.5 h-3.5" />
+              {language === 'zh' ? '历史' : 'History'}
             </button>
+            <div 
+              className="flex items-center bg-white/5 border border-white/10 rounded-full p-0.5 cursor-pointer relative w-[64px] h-6 select-none group hover:border-white/20 transition-colors"
+              onClick={() => setLanguage(prev => prev === 'zh' ? 'en' : 'zh')}
+            >
+              <motion.div
+                className="absolute inset-y-0.5 bg-white/10 border border-white/20 rounded-full shadow-inner"
+                initial={false}
+                animate={{ 
+                  x: language === 'zh' ? 0 : 30,
+                  width: 30
+                }}
+                transition={{ type: "spring", stiffness: 500, damping: 35 }}
+              />
+              <div className={`flex-1 text-center text-[9px] font-black z-10 transition-colors duration-300 ${language === 'zh' ? 'text-white' : 'text-zinc-500'}`}>
+                中
+              </div>
+              <div className={`flex-1 text-center text-[9px] font-black z-10 transition-colors duration-300 ${language === 'en' ? 'text-white' : 'text-zinc-500'}`}>
+                EN
+              </div>
+            </div>
           </div>
           <motion.h1 
             initial={{ opacity: 0, y: -20 }}
@@ -1143,84 +1652,84 @@ CRITICAL INSTRUCTIONS:
         </header>
 
         <main className={`space-y-6 flex-1 flex flex-col`}>
-          <div className="flex justify-center mb-8 shrink-0">
-            <div className="flex gap-4 md:gap-8 p-4 rounded-3xl border border-white/5 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] bg-black/20 liquid-panel">
+          <div className="flex justify-center mb-4 md:mb-8 shrink-0">
+            <div className="grid grid-cols-3 sm:flex sm:flex-nowrap gap-3 md:gap-8 p-3 md:p-4 rounded-3xl border border-white/5 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] bg-black/20 liquid-panel w-full sm:w-auto">
               <button
                 onClick={() => setAppMode('extractor')}
-                className="group flex flex-col items-center gap-3 transition-all duration-300 active:scale-95 relative"
+                className="group flex flex-col items-center gap-2 md:gap-3 transition-all duration-300 active:scale-95 relative"
               >
-                <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500 border border-white/10 ${
+                <div className={`w-12 h-12 md:w-16 md:h-16 rounded-full flex items-center justify-center transition-all duration-500 border border-white/10 ${
                   appMode === 'extractor'
                     ? 'bg-white text-black shadow-[0_0_50px_rgba(255,255,255,0.7)] scale-105 z-10'
                     : 'bg-black/40 text-white hover:bg-black/60 z-0'
                 }`}>
-                  <FileText className="w-7 h-7" />
+                  <FileText className="w-5 h-5 md:w-7 md:h-7" />
                 </div>
-                <span className={`text-xs font-medium transition-colors ${appMode === 'extractor' ? 'text-white' : 'text-zinc-400'}`}>
+                <span className={`text-[10px] md:text-xs font-medium transition-colors text-center ${appMode === 'extractor' ? 'text-white' : 'text-zinc-400'}`}>
                   {t.extractorMode}
                 </span>
               </button>
               
               <button
                 onClick={() => setAppMode('audio-tutor')}
-                className="group flex flex-col items-center gap-3 transition-all duration-300 active:scale-95 relative"
+                className="group flex flex-col items-center gap-2 md:gap-3 transition-all duration-300 active:scale-95 relative"
               >
-                <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500 border border-white/10 ${
+                <div className={`w-12 h-12 md:w-16 md:h-16 rounded-full flex items-center justify-center transition-all duration-500 border border-white/10 ${
                   appMode === 'audio-tutor'
                     ? 'bg-white text-black shadow-[0_0_50px_rgba(255,255,255,0.7)] scale-105 z-10'
                     : 'bg-black/40 text-white hover:bg-black/60 z-0'
                 }`}>
-                  <Headphones className="w-7 h-7" />
+                  <Headphones className="w-5 h-5 md:w-7 md:h-7" />
                 </div>
-                <span className={`text-xs font-medium transition-colors ${appMode === 'audio-tutor' ? 'text-white' : 'text-zinc-400'}`}>
+                <span className={`text-[10px] md:text-xs font-medium transition-colors text-center ${appMode === 'audio-tutor' ? 'text-white' : 'text-zinc-400'}`}>
                   {t.audioTutorMode}
                 </span>
               </button>
 
               <button
                 onClick={() => setAppMode('grapher')}
-                className="group flex flex-col items-center gap-3 transition-all duration-300 active:scale-95 relative"
+                className="group flex flex-col items-center gap-2 md:gap-3 transition-all duration-300 active:scale-95 relative"
               >
-                <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500 border border-white/10 ${
+                <div className={`w-12 h-12 md:w-16 md:h-16 rounded-full flex items-center justify-center transition-all duration-500 border border-white/10 ${
                   appMode === 'grapher'
                     ? 'bg-white text-black shadow-[0_0_50px_rgba(255,255,255,0.7)] scale-105 z-10'
                     : 'bg-black/40 text-white hover:bg-black/60 z-0'
                 }`}>
-                  <LineChart className="w-7 h-7" />
+                  <LineChart className="w-5 h-5 md:w-7 md:h-7" />
                 </div>
-                <span className={`text-xs font-medium transition-colors ${appMode === 'grapher' ? 'text-white' : 'text-zinc-400'}`}>
+                <span className={`text-[10px] md:text-xs font-medium transition-colors text-center ${appMode === 'grapher' ? 'text-white' : 'text-zinc-400'}`}>
                   {t.grapherMode}
                 </span>
               </button>
 
               <button
                 onClick={() => setAppMode('reading-coach')}
-                className="group flex flex-col items-center gap-3 transition-all duration-300 active:scale-95 relative"
+                className="group flex flex-col items-center gap-2 md:gap-3 transition-all duration-300 active:scale-95 relative"
               >
-                <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500 border border-white/10 ${
+                <div className={`w-12 h-12 md:w-16 md:h-16 rounded-full flex items-center justify-center transition-all duration-500 border border-white/10 ${
                   appMode === 'reading-coach'
                     ? 'bg-white text-black shadow-[0_0_50px_rgba(255,255,255,0.7)] scale-105 z-10'
                     : 'bg-black/40 text-white hover:bg-black/60 z-0'
                 }`}>
-                  <BookOpen className="w-7 h-7" />
+                  <BookOpen className="w-5 h-5 md:w-7 md:h-7" />
                 </div>
-                <span className={`text-xs font-medium transition-colors ${appMode === 'reading-coach' ? 'text-white' : 'text-zinc-400'}`}>
+                <span className={`text-[10px] md:text-xs font-medium transition-colors text-center ${appMode === 'reading-coach' ? 'text-white' : 'text-zinc-400'}`}>
                   {language === 'zh' ? '朗读纠错' : 'Reading Coach'}
                 </span>
               </button>
 
               <button
                 onClick={() => setAppMode('material-assistant')}
-                className="group flex flex-col items-center gap-3 transition-all duration-300 active:scale-95 relative"
+                className="group flex flex-col items-center gap-2 md:gap-3 transition-all duration-300 active:scale-95 relative"
               >
-                <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500 border border-white/10 ${
+                <div className={`w-12 h-12 md:w-16 md:h-16 rounded-full flex items-center justify-center transition-all duration-500 border border-white/10 ${
                   appMode === 'material-assistant'
                     ? 'bg-white text-black shadow-[0_0_50px_rgba(255,255,255,0.7)] scale-105 z-10'
                     : 'bg-black/40 text-white hover:bg-black/60 z-0'
                 }`}>
-                  <Book className="w-7 h-7" />
+                  <Book className="w-5 h-5 md:w-7 md:h-7" />
                 </div>
-                <span className={`text-xs font-medium transition-colors ${appMode === 'material-assistant' ? 'text-white' : 'text-zinc-400'}`}>
+                <span className={`text-[10px] md:text-xs font-medium transition-colors text-center ${appMode === 'material-assistant' ? 'text-white' : 'text-zinc-400'}`}>
                   {language === 'zh' ? '语文素材' : 'Materials'}
                 </span>
               </button>
@@ -1229,19 +1738,19 @@ CRITICAL INSTRUCTIONS:
 
           {/* Model Selection */}
           {appMode !== 'reading-coach' && appMode !== 'grapher' && (
-            <div className="flex flex-wrap md:flex-nowrap gap-4 justify-center py-2">
+            <div className="grid grid-cols-2 md:flex md:flex-nowrap gap-3 md:gap-4 justify-center py-2">
               {MODELS.map((m) => (
                 <button
                   key={m.id}
                   onClick={() => setSelectedModel(m.id)}
                   className={`relative group transition-all duration-300 active:scale-95`}
                 >
-                  <div className={`px-6 py-3 rounded-full flex items-center justify-center transition-all duration-500 border border-white/10 backdrop-blur-md ${
+                  <div className={`px-4 md:px-6 py-2.5 md:py-3 rounded-full flex items-center justify-center transition-all duration-500 border border-white/10 backdrop-blur-md ${
                     selectedModel === m.id 
                       ? 'bg-white text-black shadow-[0_0_30px_rgba(255,255,255,0.5)] scale-105' 
                       : 'bg-black/40 text-zinc-400 hover:text-white hover:bg-black/60'
                   }`}>
-                    <span className="font-bold text-xs tracking-wide">{m.name}</span>
+                    <span className="font-bold text-[10px] md:text-xs tracking-wide">{m.name}</span>
                   </div>
                 </button>
               ))}
@@ -1250,8 +1759,8 @@ CRITICAL INSTRUCTIONS:
 
           {/* Textbook Association Section */}
           {appMode !== 'reading-coach' && appMode !== 'grapher' && appMode !== 'material-assistant' && (
-            <div className="flex items-center justify-between p-4 rounded-3xl border border-white/5 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] bg-black/20 liquid-panel">
-              <div className="flex items-center gap-4">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 p-4 rounded-3xl border border-white/5 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] bg-black/20 liquid-panel">
+              <div className="flex flex-col md:flex-row md:items-center gap-4">
                 {appMode === 'audio-tutor' && (
                   <>
                     <label className="flex items-center gap-3 cursor-pointer group">
@@ -1319,11 +1828,12 @@ CRITICAL INSTRUCTIONS:
             >
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1">
                 {/* Right Panel: Graph */}
-                <div className="lg:col-span-8 flex flex-col gap-4 min-h-[500px]">
+                <div className="lg:col-span-8 flex flex-col gap-4 h-[350px] md:h-[500px]">
                   <div className="flex-1 relative">
                     <GraphView 
                       functions={graphFunctions.filter(f => f.visible).map(f => ({ expression: f.expression, color: f.color }))} 
                       parameters={graphParameters}
+                      onSave={handleSaveGraph}
                     />
                   </div>
                 </div>
@@ -1618,11 +2128,13 @@ CRITICAL INSTRUCTIONS:
               transition={{ duration: 0.3 }}
               className="flex-1 flex flex-col"
             >
-              <div className="flex-1 min-h-[70vh] rounded-2xl overflow-hidden border border-white/10 shadow-2xl bg-black/20 backdrop-blur-3xl liquid-panel">
+              <div className="flex-1 min-h-[50vh] md:min-h-[70vh] rounded-2xl overflow-hidden border border-white/10 shadow-2xl bg-black/20 backdrop-blur-3xl liquid-panel">
                 <MaterialAssistant 
                   lang={language} 
                   materials={materials} 
+                  groups={materialGroups}
                   onManageMaterials={() => setShowMaterialManager(true)}
+                  onSaveHistory={saveHistory}
                 />
               </div>
             </motion.div>
@@ -1642,6 +2154,7 @@ CRITICAL INSTRUCTIONS:
                 associateTextbook={associateTextbook}
                 selectedTextbookIds={selectedTextbookIds}
                 textbooks={textbooks}
+                onSaveHistory={saveHistory}
               />
             </motion.div>
           </div>
@@ -1653,8 +2166,8 @@ CRITICAL INSTRUCTIONS:
               transition={{ duration: 0.3 }}
               className="flex-1 flex flex-col"
             >
-              <div className="flex-1 min-h-[70vh] rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
-                <ReadingCoach lang={language} />
+              <div className="flex-1 min-h-[50vh] md:min-h-[70vh] rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
+                <ReadingCoach lang={language} onSaveHistory={saveHistory} />
               </div>
             </motion.div>
           </div>
@@ -1679,34 +2192,34 @@ CRITICAL INSTRUCTIONS:
                       <input type="file" ref={cameraInputRef} onChange={handleFileChange} accept="image/*" capture="environment" multiple className="hidden" />
 
                       {files.length === 0 ? (
-                        <div className="flex flex-col md:flex-row gap-4">
+                        <div className="flex flex-row gap-3">
                           <div
                             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                             onDragLeave={() => setIsDragging(false)}
                             onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files) processFiles(e.dataTransfer.files); }}
                             onClick={() => fileInputRef.current?.click()}
                             className={`
-                              flex-1 relative border border-white/10 rounded-3xl p-8 text-center cursor-pointer transition-all duration-500
+                              flex-1 relative border border-white/10 rounded-2xl md:rounded-3xl p-4 md:p-8 text-center cursor-pointer transition-all duration-500
                               ${isDragging ? 'bg-white text-black scale-[0.99] shadow-[0_0_50px_rgba(255,255,255,0.5)]' : 'bg-black/20 hover:bg-black/40 hover:border-white/30'}
                             `}
                           >
-                            <div className="flex flex-col items-center gap-4">
-                              <div className={`p-4 rounded-full transition-all duration-500 ${isDragging ? 'bg-black text-white' : 'bg-white/5 text-zinc-400 group-hover:bg-white group-hover:text-black shadow-[0_0_20px_rgba(255,255,255,0.1)]'}`}>
-                                <Upload className="w-8 h-8" />
+                            <div className="flex flex-col items-center gap-2 md:gap-4">
+                              <div className={`p-2.5 md:p-4 rounded-full transition-all duration-500 ${isDragging ? 'bg-black text-white' : 'bg-white/5 text-zinc-400 group-hover:bg-white group-hover:text-black shadow-[0_0_20px_rgba(255,255,255,0.1)]'}`}>
+                                <Upload className="w-5 h-5 md:w-8 md:h-8" />
                               </div>
-                              <p className={`text-sm font-medium transition-colors ${isDragging ? 'text-black' : 'text-zinc-300'}`}>{t.upload}</p>
+                              <p className={`text-[10px] md:text-sm font-medium transition-colors ${isDragging ? 'text-black' : 'text-zinc-300'}`}>{t.upload}</p>
                             </div>
                           </div>
 
                           <div
                             onClick={() => cameraInputRef.current?.click()}
-                            className="md:w-48 relative border border-white/10 rounded-3xl p-8 text-center cursor-pointer bg-black/20 hover:bg-black/40 hover:border-white/30 transition-all duration-500 group"
+                            className="flex-1 md:w-48 relative border border-white/10 rounded-2xl md:rounded-3xl p-4 md:p-8 text-center cursor-pointer bg-black/20 hover:bg-black/40 hover:border-white/30 transition-all duration-500 group"
                           >
-                            <div className="flex flex-col items-center gap-4">
-                              <div className="p-4 rounded-full bg-white/5 text-zinc-400 group-hover:bg-white group-hover:text-black transition-all duration-500 shadow-[0_0_20px_rgba(255,255,255,0.1)]">
-                                <Camera className="w-8 h-8" />
+                            <div className="flex flex-col items-center gap-2 md:gap-4">
+                              <div className="p-2.5 md:p-4 rounded-full bg-white/5 text-zinc-400 group-hover:bg-white group-hover:text-black transition-all duration-500 shadow-[0_0_20px_rgba(255,255,255,0.1)]">
+                                <Camera className="w-5 h-5 md:w-8 md:h-8" />
                               </div>
-                              <p className="text-zinc-300 text-sm font-medium">{t.camera}</p>
+                              <p className="text-zinc-300 text-[10px] md:text-sm font-medium">{t.camera}</p>
                             </div>
                           </div>
                         </div>
@@ -1832,6 +2345,10 @@ CRITICAL INSTRUCTIONS:
                     setModel={setSelectedModel}
                     lang={language}
                     textbooks={textbooks}
+                    groups={textbookGroups}
+                    allQuestions={questions}
+                    currentIndex={selectedIdx}
+                    onSelectQuestion={setSelectedIdx}
                   />
                 </motion.div>
               )}
@@ -1841,12 +2358,29 @@ CRITICAL INSTRUCTIONS:
       </div>
 
       {showTextbookManager && (
-        <TextbookManager onClose={() => setShowTextbookManager(false)} lang={language} />
+        <TextbookManager 
+          onClose={() => setShowTextbookManager(false)} 
+          lang={language} 
+          isAdmin={isAdmin}
+        />
       )}
 
       {showMaterialManager && (
-        <TextbookManager onClose={() => setShowMaterialManager(false)} lang={language} type="material" />
+        <TextbookManager 
+          onClose={() => setShowMaterialManager(false)} 
+          lang={language} 
+          type="material" 
+          isAdmin={isAdmin}
+        />
       )}
+
+      <HistoryDrawer 
+        isOpen={isHistoryOpen} 
+        onClose={() => setIsHistoryOpen(false)} 
+        onSelectRecord={handleSelectHistoryRecord}
+        lang={language}
+        uid={user?.uid}
+      />
     </div>
   );
 }

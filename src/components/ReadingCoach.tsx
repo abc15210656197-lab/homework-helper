@@ -80,9 +80,10 @@ If you ever felt that there is more to life than boring jobs, why not subscribe 
 
 interface ReadingCoachProps {
   lang: 'zh' | 'en';
+  onSaveHistory?: (module: string, summary: string, content: any, file?: File | { base64: string, mimeType: string }) => void;
 }
 
-export function ReadingCoach({ lang }: ReadingCoachProps) {
+export function ReadingCoach({ lang, onSaveHistory }: ReadingCoachProps) {
   const [selectedArticleId, setSelectedArticleId] = useState(ARTICLES[0].id);
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -335,6 +336,9 @@ IMPORTANT:
         setEvaluationScore(data.score);
         setMispronouncedWords(data.mispronouncedWords || []);
         setInaccurateWords(data.inaccurateWords || []);
+        if (onSaveHistory) {
+          onSaveHistory('reading-coach', selectedArticle.title, { article: selectedArticle, evaluation: data });
+        }
       }
     } catch (err) {
       console.error("Error evaluating audio:", err);
@@ -510,12 +514,12 @@ IMPORTANT:
               )}
 
               {/* Action Bar */}
-              <div className="mt-12 flex flex-col items-center pb-12">
-                <div className="flex items-center gap-3 bg-zinc-900/90 backdrop-blur-md p-2 rounded-full border border-zinc-700/50 shadow-2xl liquid-panel-strong">
+              <div className="mt-8 md:mt-12 flex flex-col items-center pb-12">
+                <div className="flex flex-col sm:flex-row items-center gap-3 bg-zinc-900/90 backdrop-blur-md p-2 rounded-2xl sm:rounded-full border border-zinc-700/50 shadow-2xl liquid-panel-strong w-full sm:w-auto">
                   {!isRecording ? (
                     <button
                       onClick={startRecording}
-                      className="flex items-center gap-2 bg-white hover:bg-zinc-200 text-black px-6 py-3 rounded-full font-medium transition-all shadow-[0_0_30px_rgba(255,255,255,0.4)] active:scale-95"
+                      className="w-full sm:w-auto flex items-center justify-center gap-2 bg-white hover:bg-zinc-200 text-black px-6 py-3 rounded-xl sm:rounded-full font-medium transition-all shadow-[0_0_30px_rgba(255,255,255,0.4)] active:scale-95"
                     >
                       <Mic className="w-5 h-5" />
                       {lang === 'zh' ? '开始朗读' : 'Start Reading'}
@@ -523,7 +527,7 @@ IMPORTANT:
                   ) : (
                     <button
                       onClick={stopRecording}
-                      className="flex items-center gap-2 bg-red-500 hover:bg-red-400 text-white px-6 py-3 rounded-full font-medium transition-all shadow-lg shadow-red-500/20 animate-pulse liquid-button"
+                      className="w-full sm:w-auto flex items-center justify-center gap-2 bg-red-500 hover:bg-red-400 text-white px-6 py-3 rounded-xl sm:rounded-full font-medium transition-all shadow-lg shadow-red-500/20 animate-pulse liquid-button"
                     >
                       <Square className="w-5 h-5" />
                       {lang === 'zh' ? '停止录音' : 'Stop Recording'} ({formatTime(recordingTime)})
@@ -534,7 +538,7 @@ IMPORTANT:
                     <button
                       onClick={evaluateAudio}
                       disabled={isEvaluating}
-                      className={`flex items-center gap-2 px-6 py-3 rounded-full font-medium transition-all shadow-lg ${
+                      className={`w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl sm:rounded-full font-medium transition-all shadow-lg ${
                         isEvaluating
                           ? 'bg-zinc-700 text-zinc-300 cursor-wait'
                           : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-500/20 liquid-button'

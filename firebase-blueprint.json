@@ -1,0 +1,45 @@
+{
+  "entities": {
+    "Textbook": {
+      "title": "Textbook",
+      "description": "A textbook or material file",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "url": { "type": "string" },
+        "fileId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "groupId": { "type": "string" }
+      },
+      "required": ["name", "url", "createdAt"]
+    },
+    "TextbookGroup": {
+      "title": "Textbook Group",
+      "description": "A group for textbooks",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "createdAt"]
+    }
+  },
+  "firestore": {
+    "textbooks": {
+      "schema": "Textbook",
+      "description": "Collection of textbooks"
+    },
+    "textbook_groups": {
+      "schema": "TextbookGroup",
+      "description": "Collection of textbook groups"
+    },
+    "materials": {
+      "schema": "Textbook",
+      "description": "Collection of materials"
+    },
+    "material_groups": {
+      "schema": "TextbookGroup",
+      "description": "Collection of material groups"
+    }
+  }
+}

@@ -215,14 +215,16 @@ export function AudioTutorView({
   lang,
   associateTextbook,
   selectedTextbookIds,
-  textbooks
+  textbooks,
+  onSaveHistory
 }: { 
   files: File[], 
   setFiles: (f: File[]) => void, 
   lang: 'zh' | 'en',
   associateTextbook?: boolean,
   selectedTextbookIds?: string[],
-  textbooks?: Textbook[]
+  textbooks?: Textbook[],
+  onSaveHistory?: (module: string, summary: string, content: any, file?: File | { base64: string, mimeType: string }) => void
 }) {
   const t = TRANSLATIONS[lang];
   const [state, setState] = useState<'idle' | 'uploading' | 'generating' | 'done'>('idle');
@@ -383,13 +385,18 @@ export function AudioTutorView({
       
       const result = JSON.parse(textResponse.text || '{}');
       
-      setData({ 
+      const newData = { 
         overallExplanation: result.overallExplanation || '', 
         questions: result.questions || [], 
         imageBase64: base64Data, 
         mimeType: f.type 
-      });
+      };
+      setData(newData);
       setState('done');
+      
+      if (onSaveHistory) {
+        onSaveHistory('audio-tutor', newData.overallExplanation.substring(0, 50), newData, files[0]);
+      }
       
     } catch (err: any) {
       console.error(err);
