@@ -168,6 +168,27 @@ const GraphView: React.FC<GraphViewProps> = ({ functions, parameters = {}, onSav
           .replace(/sin\^-1/gi, 'asin')
           .replace(/cos\^-1/gi, 'acos')
           .replace(/tan\^-1/gi, 'atan')
+          .replace(/\\sin/g, 'sin')
+          .replace(/\\cos/g, 'cos')
+          .replace(/\\tan/g, 'tan')
+          .replace(/\\arcsin/g, 'asin')
+          .replace(/\\arccos/g, 'acos')
+          .replace(/\\arctan/g, 'atan')
+          .replace(/\\ln/g, 'ln')
+          .replace(/\\log_2/g, 'log2')
+          .replace(/\\log_\{2\}/g, 'log2')
+          .replace(/\\log_{10}/g, 'log10')
+          .replace(/\\sqrt{/g, 'sqrt(')
+          .replace(/\\frac{([^{}]+)}{([^{}]+)}/g, '(($1)/($2))')
+          .replace(/\\frac{([^{}]+)}{([^{}]+)}/g, '(($1)/($2))')
+          .replace(/\\cdot/g, '*')
+          .replace(/\\times/g, '*')
+          .replace(/\\div/g, '/')
+          .replace(/\\left\(/g, '(')
+          .replace(/\\right\)/g, ')')
+          .replace(/{/g, '(')
+          .replace(/}/g, ')')
+          .replace(/\\/g, '')
           .replace(/log2\(([^)]+)\)/gi, 'log($1, 2)')
           .replace(/log10\(([^)]+)\)/gi, 'log($1, 10)')
           .replace(/π/gi, 'PI')
@@ -180,14 +201,14 @@ const GraphView: React.FC<GraphViewProps> = ({ functions, parameters = {}, onSav
           const placeholders: string[] = [];
           const sortedFns = [...functions].sort((a, b) => b.length - a.length);
           sortedFns.forEach((fn, i) => {
-            const placeholder = `__FN${i}__`;
+            const placeholder = `\uE000${i}\uE000`;
             processed = processed.replace(new RegExp(fn, 'gi'), placeholder);
             placeholders[i] = fn;
           });
           processed = processed.replace(/([a-z])([a-z])/gi, '$1 $2');
           processed = processed.replace(/([a-z])([a-z])/gi, '$1 $2');
           sortedFns.forEach((fn, i) => {
-            processed = processed.replace(new RegExp(`__FN${i}__`, 'g'), fn);
+            processed = processed.replace(new RegExp(`\uE000${i}\uE000`, 'g'), fn);
           });
           return processed;
         };

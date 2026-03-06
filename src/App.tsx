@@ -494,8 +494,8 @@ function QuestionDetail({
 
   const structure = useMemo(() => {
     const s: { label: string, children: string[] }[] = [];
-    // Match (1), (2) or 1., 2.
-    const regex1 = /(?:^|\s)(\(\d+\)|\d+\.)(?=\s|$)/g;
+    // Match (1), (2), 1., 2., ①, ②
+    const regex1 = /(?:^|\s)(\(\d+\)|\d+\.|[\u2460-\u2473])(?=\s|$)/g;
     let match;
     const matches: { label: string, index: number }[] = [];
     
@@ -509,11 +509,11 @@ function QuestionDetail({
         const next = matches[i+1];
         const content = data.question.slice(m.index, next ? next.index : undefined);
         const children: string[] = [];
-        // Look for a. b. c.
-        const regex2 = /(?:^|\s)([a-z])\.(?=\s)/g;
+        // Look for a. b. c. or a) b) c) or (a) (b) (c)
+        const regex2 = /(?:^|\s)(?:\(([a-z])\)|([a-z])(?:\.|\)))(?=\s)/g;
         let m2;
         while ((m2 = regex2.exec(content)) !== null) {
-          children.push(m2[1]);
+          children.push(m2[1] || m2[2]);
         }
         s.push({ label: m.label, children });
       });
@@ -534,44 +534,37 @@ function QuestionDetail({
   const getSegment = (text: string, l1: string | null, l2: string | null) => {
     if (!l1 || !text) return text;
     
-    const escapedL1 = l1.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escapedL1 = escapeRegExp(l1);
+    
+    // Find start of L1
     const regex1 = new RegExp(`(?:^|\\s)${escapedL1}(?=\\s|$)`);
     const match1 = text.match(regex1);
-    
     if (!match1) return text;
-    
     const startIndex1 = match1.index!;
     
-    let nextL1 = '';
-    const numMatch = l1.match(/\d+/);
-    if (numMatch) {
-      const num = parseInt(numMatch[0]) + 1;
-      if (l1.includes('(')) nextL1 = `\\(${num}\\)`;
-      else nextL1 = `${num}\\.`;
-    }
-    
-    const regexNext1 = new RegExp(`(?:^|\\s)${nextL1}(?=\\s|$)`);
-    const matchNext1 = text.match(regexNext1);
-    
-    const endIndex1 = matchNext1 ? matchNext1.index : text.length;
+    // Find end of L1 (start of next L1 or end of text)
+    const regexAnyL1 = /(?:^|\s)(\(\d+\)|\d+\.|[\u2460-\u2473])(?=\s|$)/g;
+    regexAnyL1.lastIndex = startIndex1 + l1.length;
+    const nextMatch = regexAnyL1.exec(text);
+    const endIndex1 = nextMatch ? nextMatch.index : text.length;
     
     let content = text.slice(startIndex1, endIndex1);
     
     if (!l2) return content;
     
-    const regex2 = new RegExp(`(?:^|\\s)${l2}\\.(?=\\s)`);
+    // L2 logic
+    // Match a. or a) or (a)
+    const regex2 = new RegExp(`(?:^|\\s)(?:\\(${l2}\\)|${l2}(?:\\.|\\)))(?=\\s)`);
     const match2 = content.match(regex2);
-    
     if (!match2) return content;
-    
     const startIndex2 = match2.index!;
     
-    const nextL2Code = l2.charCodeAt(0) + 1;
-    const nextL2 = String.fromCharCode(nextL2Code);
-    const regexNext2 = new RegExp(`(?:^|\\s)${nextL2}\\.(?=\\s)`);
-    const matchNext2 = content.match(regexNext2);
-    
-    const endIndex2 = matchNext2 ? matchNext2.index : content.length;
+    // Find end of L2
+    const regexAnyL2 = /(?:^|\s)(?:\([a-z]\)|[a-z](?:\.|\)))(?=\s)/g;
+    regexAnyL2.lastIndex = startIndex2 + 1;
+    const nextMatch2 = regexAnyL2.exec(content);
+    const endIndex2 = nextMatch2 ? nextMatch2.index : content.length;
     
     return content.slice(startIndex2, endIndex2);
   };
@@ -660,6 +653,16 @@ function QuestionDetail({
           }}
         >
           {formatContent(getSegment(data.question, subQ, subSubQ))}
+        </ReactMarkdown>
+      </div>
+    </div>
+  );
+
+  const AnswerContent = (isFull: boolean) => (
+    <div className={`p-4 text-zinc-200 font-medium text-lg overflow-y-auto ${isFull ? 'flex-1' : ''}`}>
+      <div className="markdown-body">
+        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} rehypePlugins={[rehypeKatex]}>
+          {formatContent(getSegment(data.answer, subQ, subSubQ))}
         </ReactMarkdown>
       </div>
     </div>
@@ -764,7 +767,7 @@ function QuestionDetail({
                        : 'bg-white/5 text-zinc-400 border-white/5 hover:bg-white/10 hover:text-zinc-200'
                    }`}
                  >
-                   {child}.
+                   {child}
                  </button>
                ))}
              </div>
@@ -779,9 +782,7 @@ function QuestionDetail({
 
       <div className="rounded-2xl border border-white/10 overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-3xl ring-1 ring-white/5 liquid-panel">
         <PanelHeader title={t.answer} icon={Check} type="answer" />
-        <div className="p-4 text-zinc-200 font-medium text-lg">
-          {getSegment(data.answer, subQ, subSubQ)}
-        </div>
+        {AnswerContent(false)}
       </div>
 
       <div className="grid md:grid-cols-2 gap-3">
@@ -1141,6 +1142,7 @@ export default function App() {
   
   const [showTextbookManager, setShowTextbookManager] = useState(false);
   const [showMaterialManager, setShowMaterialManager] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const [textbooks, setTextbooks] = useState<Textbook[]>([]);
   const [textbookGroups, setTextbookGroups] = useState<TextbookGroup[]>([]);
   const [materials, setMaterials] = useState<Textbook[]>([]);
@@ -1178,7 +1180,7 @@ export default function App() {
     const sortedFns = [...functions].sort((a, b) => b.length - a.length);
     
     sortedFns.forEach((fn, i) => {
-      const placeholder = `__FN${i}__`;
+      const placeholder = `\uE000${i}\uE000`;
       processed = processed.replace(new RegExp(fn, 'gi'), placeholder);
       placeholders[i] = fn;
     });
@@ -1189,10 +1191,44 @@ export default function App() {
     
     // Restore functions
     sortedFns.forEach((fn, i) => {
-      processed = processed.replace(new RegExp(`__FN${i}__`, 'g'), fn);
+      processed = processed.replace(new RegExp(`\uE000${i}\uE000`, 'g'), fn);
     });
     
     return processed;
+  };
+
+  const normalizeMathExpression = (expression: string) => {
+    return expression
+      .replace(/f\(x\)\s*=/g, '')
+      .replace(/y\s*=/g, '')
+      .replace(/sin\^-1/gi, 'asin')
+      .replace(/cos\^-1/gi, 'acos')
+      .replace(/tan\^-1/gi, 'atan')
+      .replace(/\\sin/g, 'sin')
+      .replace(/\\cos/g, 'cos')
+      .replace(/\\tan/g, 'tan')
+      .replace(/\\arcsin/g, 'asin')
+      .replace(/\\arccos/g, 'acos')
+      .replace(/\\arctan/g, 'atan')
+      .replace(/\\ln/g, 'ln')
+      .replace(/\\log_2/g, 'log2')
+      .replace(/\\log_\{2\}/g, 'log2')
+      .replace(/\\log_{10}/g, 'log10')
+      .replace(/\\sqrt{/g, 'sqrt(')
+      .replace(/\\frac{([^{}]+)}{([^{}]+)}/g, '(($1)/($2))')
+      .replace(/\\frac{([^{}]+)}{([^{}]+)}/g, '(($1)/($2))')
+      .replace(/\\cdot/g, '*')
+      .replace(/\\times/g, '*')
+      .replace(/\\div/g, '/')
+      .replace(/\\left\(/g, '(')
+      .replace(/\\right\)/g, ')')
+      .replace(/{/g, '(')
+      .replace(/}/g, ')')
+      .replace(/\\/g, '')
+      .replace(/log2\(([^)]+)\)/gi, 'log($1, 2)')
+      .replace(/log10\(([^)]+)\)/gi, 'log($1, 10)')
+      .replace(/π/gi, 'PI')
+      .trim();
   };
 
   const t = TRANSLATIONS[language];
@@ -1221,8 +1257,9 @@ export default function App() {
 
   const detectGraphParameters = (expr: string) => {
     try {
-      const processed = splitImplicitMultiplication(expr);
-      const node = math.parse(processed.replace(/f\(x\)\s*=/g, '').replace(/y\s*=/g, ''));
+      const normalized = normalizeMathExpression(expr);
+      const processed = splitImplicitMultiplication(normalized);
+      const node = math.parse(processed);
       const variables = new Set<string>();
       node.traverse((n: any) => {
         if (n.type === 'SymbolNode' && !['x', 'y', 'e', 'pi', 'PI', 'phi', 'i'].includes(n.name)) {
@@ -1530,6 +1567,7 @@ CRITICAL INSTRUCTIONS:
 - Use STRICT LaTeX for ALL math symbols, chemical formulas (e.g., $Cl_2$, $H_2O$, $Na^+$, $SO_4^{2-}$), units (e.g., $mol/L$, $g/cm^3$), and formatting.
 - **Wrap EVERY single math/formula/unit/equation in $ for inline or $$ for block math. This is MANDATORY for chemical equations like $2NO_2 \rightleftharpoons N_2O_4$.**
 - Example: Use $Cl_2$ instead of Cl2, use $1 \text{ mol}$ instead of 1mol, use $2H_2 + O_2 \rightarrow 2H_2O$ for equations.
+- Use standard numbering: (1), (2)... or ①, ②... for sub-questions. Use a., b.... for sub-sub-questions.
 - Preserve the original layout in the "question" field. **For multiple-choice questions, ensure each option (A, B, C, D) starts on a NEW line. This is CRITICAL.**
 - Return the result as a JSON array of objects.
 - Ensure all backslashes in LaTeX are properly escaped in the JSON string (e.g., "\\\\text" for \text).`,
@@ -1587,15 +1625,42 @@ CRITICAL INSTRUCTIONS:
         <header className="mb-4 text-center p-3 pt-12 md:pt-3 rounded-2xl border border-white/10 backdrop-blur-2xl shadow-2xl relative shrink-0 liquid-panel">
           <div className="absolute top-3 right-3 flex items-center gap-3">
             {user ? (
-              <div className="flex items-center gap-2">
-                {user.photoURL && <img src={user.photoURL} alt={user.displayName || ''} className="w-6 h-6 rounded-full border border-white/20" />}
-                <button
-                  onClick={handleLogout}
-                  className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-xs text-zinc-300 transition-colors h-6"
+              <div className="relative">
+                <button 
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="flex items-center gap-2 focus:outline-none"
                 >
-                  <LogOut className="w-3.5 h-3.5" />
-                  {language === 'zh' ? '注销' : 'Logout'}
+                  {user.photoURL && <img src={user.photoURL} alt={user.displayName || ''} className="w-6 h-6 rounded-full border border-white/20 hover:border-white/40 transition-colors" />}
                 </button>
+                
+                <AnimatePresence>
+                  {showUserMenu && (
+                    <>
+                      <div 
+                        className="fixed inset-0 z-40" 
+                        onClick={() => setShowUserMenu(false)}
+                      />
+                      <motion.div
+                        initial={{ opacity: 0, y: 5, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 5, scale: 0.95 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute right-0 top-full mt-2 w-28 bg-zinc-900/90 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50"
+                      >
+                        <button
+                          onClick={() => {
+                            setShowUserMenu(false);
+                            handleLogout();
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+                        >
+                          <LogOut className="w-4 h-4" />
+                          {language === 'zh' ? '注销' : 'Logout'}
+                        </button>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
               </div>
             ) : (
               <button
@@ -1779,29 +1844,95 @@ CRITICAL INSTRUCTIONS:
                     </label>
                     
                     {associateTextbook && (
-                      <div className="flex flex-wrap gap-2 mt-2 md:mt-0">
-                        {textbooks.map(book => {
-                          const isSelected = selectedTextbookIds.includes(book.id);
+                      <div className="flex flex-col gap-3 mt-3 md:mt-0 w-full">
+                        {textbookGroups.map(group => {
+                          const groupBooks = textbooks.filter(b => b.groupId === group.id);
+                          if (groupBooks.length === 0) return null;
+                          const allGroupSelected = groupBooks.every(b => selectedTextbookIds.includes(b.id));
+                          
                           return (
-                            <button
-                              key={book.id}
-                              onClick={() => {
-                                if (isSelected) {
-                                  setSelectedTextbookIds(prev => prev.filter(id => id !== book.id));
-                                } else {
-                                  setSelectedTextbookIds(prev => [...prev, book.id]);
-                                }
-                              }}
-                              className={`px-3 py-1 text-xs font-medium rounded-full border transition-all ${
-                                isSelected 
-                                  ? 'bg-white text-black border-white shadow-[0_0_15px_rgba(255,255,255,0.4)]' 
-                                  : 'bg-black/40 border-white/10 text-zinc-400 hover:text-white hover:bg-white/10'
-                              }`}
-                            >
-                              {book.name}
-                            </button>
+                            <div key={group.id} className="flex flex-col gap-2 p-3 rounded-2xl bg-white/5 border border-white/10">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-zinc-400 flex items-center gap-1.5">
+                                  <Folder className="w-3.5 h-3.5" />
+                                  {group.name}
+                                </span>
+                                <button 
+                                  onClick={() => {
+                                    if (allGroupSelected) {
+                                      setSelectedTextbookIds(prev => prev.filter(id => !groupBooks.find(b => b.id === id)));
+                                    } else {
+                                      const newIds = [...selectedTextbookIds];
+                                      groupBooks.forEach(b => {
+                                        if (!newIds.includes(b.id)) newIds.push(b.id);
+                                      });
+                                      setSelectedTextbookIds(newIds);
+                                    }
+                                  }}
+                                  className="text-[10px] text-blue-400 hover:text-blue-300 transition-colors"
+                                >
+                                  {allGroupSelected ? (language === 'zh' ? '取消全选' : 'Deselect All') : (language === 'zh' ? '全选' : 'Select All')}
+                                </button>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {groupBooks.map(book => {
+                                  const isSelected = selectedTextbookIds.includes(book.id);
+                                  return (
+                                    <button
+                                      key={book.id}
+                                      onClick={() => {
+                                        if (isSelected) {
+                                          setSelectedTextbookIds(prev => prev.filter(id => id !== book.id));
+                                        } else {
+                                          setSelectedTextbookIds(prev => [...prev, book.id]);
+                                        }
+                                      }}
+                                      className={`px-3 py-1 text-xs font-medium rounded-full border transition-all ${
+                                        isSelected 
+                                          ? 'bg-white text-black border-white shadow-[0_0_15px_rgba(255,255,255,0.4)]' 
+                                          : 'bg-black/40 border-white/10 text-zinc-400 hover:text-white hover:bg-white/10'
+                                      }`}
+                                    >
+                                      {book.name}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
                           );
                         })}
+                        
+                        {/* Render books without a group */}
+                        {(() => {
+                          const ungroupedBooks = textbooks.filter(b => !b.groupId);
+                          if (ungroupedBooks.length === 0) return null;
+                          return (
+                            <div className="flex flex-wrap gap-2">
+                              {ungroupedBooks.map(book => {
+                                const isSelected = selectedTextbookIds.includes(book.id);
+                                return (
+                                  <button
+                                    key={book.id}
+                                    onClick={() => {
+                                      if (isSelected) {
+                                        setSelectedTextbookIds(prev => prev.filter(id => id !== book.id));
+                                      } else {
+                                        setSelectedTextbookIds(prev => [...prev, book.id]);
+                                      }
+                                    }}
+                                    className={`px-3 py-1 text-xs font-medium rounded-full border transition-all ${
+                                      isSelected 
+                                        ? 'bg-white text-black border-white shadow-[0_0_15px_rgba(255,255,255,0.4)]' 
+                                        : 'bg-black/40 border-white/10 text-zinc-400 hover:text-white hover:bg-white/10'
+                                    }`}
+                                  >
+                                    {book.name}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                   </>
@@ -1845,10 +1976,11 @@ CRITICAL INSTRUCTIONS:
                     <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4">{language === 'zh' ? '函数列表' : 'Functions'}</h3>
                     <div className="space-y-4">
                       {graphFunctions.map((f) => {
-                        const processed = splitImplicitMultiplication(f.expression);
+                        const normalized = normalizeMathExpression(f.expression);
+                        const processed = splitImplicitMultiplication(normalized);
                         const usedParams: string[] = [];
                         try {
-                          const node = math.parse(processed.replace(/f\(x\)\s*=/g, '').replace(/y\s*=/g, ''));
+                          const node = math.parse(processed);
                           node.traverse((n: any) => {
                             if (n.type === 'SymbolNode' && graphParameters[n.name]) {
                               if (!usedParams.includes(n.name)) usedParams.push(n.name);
