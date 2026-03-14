@@ -5,10 +5,9 @@ import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import rehypeKatex from 'rehype-katex';
-import { Upload, Copy, Check, FileImage, Loader2, Trash2, AlertCircle, Camera, ArrowLeft, Info, BookOpen, ChevronRight, MessageCircle, Mic, Send, ChevronLeft, Maximize2, X, Book, FileText, Headphones, LineChart, Plus, Edit2, Palette, Globe, Keyboard, Image as ImageIcon, RefreshCw, Clock, Folder, LogIn, LogOut } from 'lucide-react';
+import { Upload, Copy, Check, FileImage, Loader2, Trash2, AlertCircle, Camera, ArrowLeft, Info, BookOpen, ChevronRight, MessageCircle, Mic, Send, ChevronLeft, Maximize2, X, Book, FileText, Headphones, LineChart, Plus, Edit2, Palette, Globe, Keyboard, Image as ImageIcon, RefreshCw, Clock, Folder, LogIn, LogOut, PenTool } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { InlineMath } from 'react-katex';
-import 'katex/dist/katex.min.css';
 
 import { MODELS, TRANSLATIONS } from './constants';
 import { AudioTutorView } from './components/AudioTutor';
@@ -21,26 +20,13 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User } from 'firebase/auth';
 import * as math from 'mathjs';
+import { formatContent } from './utils/formatUtils';
+import 'github-markdown-css/github-markdown-dark.css';
 
 import { MaterialAssistant } from './components/MaterialAssistant';
+import { EssayFeedback } from './components/EssayFeedback';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
-const formatContent = (content: string) => {
-  if (!content) return '';
-  // The model might return literal escape characters if JSON escaping fails.
-  // We restore them to their LaTeX-safe backslashed versions.
-  return content
-    .replace(/\t/g, '\\t') // \text, \times, \tau
-    .replace(/\r/g, '\\r') // \right, \rho
-    .replace(/\n/g, '\\n') // \nu (if it was a literal newline, we'll fix it below)
-    .replace(/\x08/g, '\\b') // \beta
-    .replace(/\x0c/g, '\\f') // \frac
-    .replace(/\x0b/g, '\\v') // \vec
-    // Now handle the actual intended newlines
-    .replace(/\\n/g, '\n')
-    .replace(/\\\\n/g, '\n');
-};
 
 interface QuestionData {
   summary: string;
@@ -983,7 +969,9 @@ function BackgroundLines() {
 import { HistoryDrawer } from './components/HistoryDrawer';
 
 export default function App() {
-  const [appMode, setAppMode] = useState<'extractor' | 'audio-tutor' | 'reading-coach' | 'grapher' | 'material-assistant'>('extractor');
+  const [appMode, setAppMode] = useState<'extractor' | 'audio-tutor' | 'reading-coach' | 'grapher' | 'material-assistant' | 'essay-feedback'>('extractor');
+  const [materialAssistantData, setMaterialAssistantData] = useState<any>(null);
+  const [essayFeedbackData, setEssayFeedbackData] = useState<any>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -1055,7 +1043,7 @@ export default function App() {
     }
 
     try {
-      await fetch('/api/history', {
+      await fetch('/api/records', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1075,7 +1063,26 @@ export default function App() {
   const handleSelectHistoryRecord = async (record: any) => {
     setIsHistoryOpen(false);
     try {
-      const content = JSON.parse(record.content);
+      let content = JSON.parse(record.content);
+      if (typeof content === 'string') {
+        content = JSON.parse(content);
+      }
+      
+      if (content && content.isCloudFile && content.url) {
+        try {
+          const res = await fetch(content.url);
+          if (res.ok) {
+            content = await res.json();
+          } else {
+            console.error('Failed to fetch cloud content');
+            return;
+          }
+        } catch (e) {
+          console.error('Error fetching cloud content', e);
+          return;
+        }
+      }
+
       if (record.module === 'extractor') {
         setAppMode('extractor');
         setQuestions(content.questions || []);
@@ -1110,7 +1117,13 @@ export default function App() {
         if (content.parameters) setGraphParameters(content.parameters);
       } else if (record.module === 'material-assistant') {
         setAppMode('material-assistant');
-        // Material assistant restoration logic
+        setMaterialAssistantData({
+          ...content,
+          image_url: record.image_url
+        });
+      } else if (record.module === 'essay-feedback') {
+        setAppMode('essay-feedback');
+        setEssayFeedbackData(content);
       }
     } catch (e) {
       console.error('Failed to parse history content', e);
@@ -1120,10 +1133,10 @@ export default function App() {
   const handleSaveGraph = async () => {
     if (graphFunctions.length === 0) return;
     const summary = graphFunctions.map(f => f.expression).join(', ').substring(0, 50) + (graphFunctions.length > 1 ? '...' : '');
-    const content = JSON.stringify({
+    const content = {
       functions: graphFunctions,
       parameters: graphParameters
-    });
+    };
     
     await saveHistory('grapher', summary, content, undefined);
   };
@@ -1135,7 +1148,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [selectedModel, setSelectedModel] = useState('gemini-3-pro-preview');
+  const [selectedModel, setSelectedModel] = useState('gemini-3-flash-preview');
   const [language, setLanguage] = useState<'zh' | 'en'>('zh');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -1156,7 +1169,7 @@ export default function App() {
   const [graphInputValue, setGraphInputValue] = useState('');
   const [graphEditingId, setGraphEditingId] = useState<string | null>(null);
   const [graphActiveTab, setGraphActiveTab] = useState<'manual' | 'photo'>('manual');
-  const [graphScanMode, setGraphScanMode] = useState<GraphScanMode>('gemini-3-flash-low');
+  const [graphScanMode, setGraphScanMode] = useState<GraphScanMode>('gemini-3.1-flash-lite-low');
   const [graphIsScanning, setGraphIsScanning] = useState(false);
   const [graphScannedResults, setGraphScannedResults] = useState<string[]>([]);
   const [graphLastImageData, setGraphLastImageData] = useState<{ base64: string, mimeType: string } | null>(null);
@@ -1180,7 +1193,7 @@ export default function App() {
     const sortedFns = [...functions].sort((a, b) => b.length - a.length);
     
     sortedFns.forEach((fn, i) => {
-      const placeholder = `\uE000${i}\uE000`;
+      const placeholder = ` \uE000${i}\uE000 `;
       processed = processed.replace(new RegExp(fn, 'gi'), placeholder);
       placeholders[i] = fn;
     });
@@ -1191,7 +1204,7 @@ export default function App() {
     
     // Restore functions
     sortedFns.forEach((fn, i) => {
-      processed = processed.replace(new RegExp(`\uE000${i}\uE000`, 'g'), fn);
+      processed = processed.replace(new RegExp(` \\uE000${i}\\uE000 `, 'g'), fn);
     });
     
     return processed;
@@ -1199,7 +1212,7 @@ export default function App() {
 
   const normalizeMathExpression = (expression: string) => {
     return expression
-      .replace(/f\(x\)\s*=/g, '')
+      .replace(/[a-zA-Z]\(x\)\s*=/g, '')
       .replace(/y\s*=/g, '')
       .replace(/sin\^-1/gi, 'asin')
       .replace(/cos\^-1/gi, 'acos')
@@ -1210,7 +1223,8 @@ export default function App() {
       .replace(/\\arcsin/g, 'asin')
       .replace(/\\arccos/g, 'acos')
       .replace(/\\arctan/g, 'atan')
-      .replace(/\\ln/g, 'ln')
+      .replace(/\\ln/g, 'log')
+      .replace(/\bln\b/g, 'log')
       .replace(/\\log_2/g, 'log2')
       .replace(/\\log_\{2\}/g, 'log2')
       .replace(/\\log_{10}/g, 'log10')
@@ -1798,6 +1812,22 @@ CRITICAL INSTRUCTIONS:
                   {language === 'zh' ? '语文素材' : 'Materials'}
                 </span>
               </button>
+
+              <button
+                onClick={() => setAppMode('essay-feedback')}
+                className="group flex flex-col items-center gap-2 md:gap-3 transition-all duration-300 active:scale-95 relative"
+              >
+                <div className={`w-12 h-12 md:w-16 md:h-16 rounded-full flex items-center justify-center transition-all duration-500 border border-white/10 ${
+                  appMode === 'essay-feedback'
+                    ? 'bg-white text-black shadow-[0_0_50px_rgba(255,255,255,0.7)] scale-105 z-10'
+                    : 'bg-black/40 text-white hover:bg-black/60 z-0'
+                }`}>
+                  <PenTool className="w-5 h-5 md:w-7 md:h-7" />
+                </div>
+                <span className={`text-[10px] md:text-xs font-medium transition-colors text-center ${appMode === 'essay-feedback' ? 'text-white' : 'text-zinc-400'}`}>
+                  {language === 'zh' ? '作文讲评' : 'Essay Feedback'}
+                </span>
+              </button>
             </div>
           </div>
 
@@ -1823,7 +1853,7 @@ CRITICAL INSTRUCTIONS:
           )}
 
           {/* Textbook Association Section */}
-          {appMode !== 'reading-coach' && appMode !== 'grapher' && appMode !== 'material-assistant' && (
+          {appMode !== 'reading-coach' && appMode !== 'grapher' && appMode !== 'material-assistant' && appMode !== 'essay-feedback' && (
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 p-4 rounded-3xl border border-white/5 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] bg-black/20 liquid-panel">
               <div className="flex flex-col md:flex-row md:items-center gap-4">
                 {appMode === 'audio-tutor' && (
@@ -2149,31 +2179,44 @@ CRITICAL INSTRUCTIONS:
                           <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">
                             {language === 'zh' ? '识别模型与推理等级' : 'Model & Thinking Level'}
                           </label>
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-3 gap-2">
                             <button
-                              onClick={() => setGraphScanMode('gemini-3-flash-low')}
+                              onClick={() => setGraphScanMode('gemini-3.1-flash-lite-low')}
                               className={`flex flex-col items-start p-3 rounded-xl border transition-all ${
-                                graphScanMode === 'gemini-3-flash-low'
+                                graphScanMode === 'gemini-3.1-flash-lite-low'
+                                  ? 'bg-white text-black border-white shadow-lg'
+                                  : 'bg-white/5 text-zinc-400 border-white/5 hover:bg-white/10'
+                              }`}
+                            >
+                              <span className="text-xs font-bold">Gemini 3.1 Flash Lite</span>
+                              <span className={`text-[10px] ${graphScanMode === 'gemini-3.1-flash-lite-low' ? 'text-zinc-600' : 'text-zinc-500'}`}>
+                                Low Level (Fast)
+                              </span>
+                            </button>
+                            <button
+                              onClick={() => setGraphScanMode('gemini-3-flash-high')}
+                              className={`flex flex-col items-start p-3 rounded-xl border transition-all ${
+                                graphScanMode === 'gemini-3-flash-high'
                                   ? 'bg-white text-black border-white shadow-lg'
                                   : 'bg-white/5 text-zinc-400 border-white/5 hover:bg-white/10'
                               }`}
                             >
                               <span className="text-xs font-bold">Gemini 3 Flash</span>
-                              <span className={`text-[10px] ${graphScanMode === 'gemini-3-flash-low' ? 'text-zinc-600' : 'text-zinc-500'}`}>
-                                Low Level (Fast)
+                              <span className={`text-[10px] ${graphScanMode === 'gemini-3-flash-high' ? 'text-zinc-600' : 'text-zinc-500'}`}>
+                                High Level (Precise)
                               </span>
                             </button>
                             <button
-                              onClick={() => setGraphScanMode('gemini-3.1-pro-high')}
+                              onClick={() => setGraphScanMode('gemini-3.1-pro-preview')}
                               className={`flex flex-col items-start p-3 rounded-xl border transition-all ${
-                                graphScanMode === 'gemini-3.1-pro-high'
+                                graphScanMode === 'gemini-3.1-pro-preview'
                                   ? 'bg-white text-black border-white shadow-lg'
                                   : 'bg-white/5 text-zinc-400 border-white/5 hover:bg-white/10'
                               }`}
                             >
                               <span className="text-xs font-bold">Gemini 3.1 Pro</span>
-                              <span className={`text-[10px] ${graphScanMode === 'gemini-3.1-pro-high' ? 'text-zinc-600' : 'text-zinc-500'}`}>
-                                High Level (Precise)
+                              <span className={`text-[10px] ${graphScanMode === 'gemini-3.1-pro-preview' ? 'text-zinc-600' : 'text-zinc-500'}`}>
+                                Advanced (Complex)
                               </span>
                             </button>
                           </div>
@@ -2267,6 +2310,28 @@ CRITICAL INSTRUCTIONS:
                   groups={materialGroups}
                   onManageMaterials={() => setShowMaterialManager(true)}
                   onSaveHistory={saveHistory}
+                  initialData={materialAssistantData}
+                />
+              </div>
+            </motion.div>
+          </div>
+
+          <div className={appMode === 'essay-feedback' ? 'block flex-1 flex flex-col' : 'hidden'}>
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="flex-1 flex flex-col"
+            >
+              <div className="flex-1 min-h-[50vh] md:min-h-[70vh] rounded-2xl overflow-hidden border border-white/10 shadow-2xl bg-black/20 backdrop-blur-3xl liquid-panel">
+                <EssayFeedback 
+                  lang={language} 
+                  onSaveHistory={saveHistory}
+                  initialData={essayFeedbackData}
+                  materials={materials}
+                  groups={materialGroups}
+                  onManageMaterials={() => setShowMaterialManager(true)}
+                  selectedModel={selectedModel}
                 />
               </div>
             </motion.div>

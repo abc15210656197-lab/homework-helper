@@ -5,16 +5,20 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import { formatContent } from '../utils/formatUtils';
 import { Textbook, TextbookGroup } from './TextbookManager';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-export function MaterialAssistant({ lang, materials, groups, onManageMaterials, onSaveHistory }: { 
+export function MaterialAssistant({ lang, materials, groups, onManageMaterials, onSaveHistory, initialData }: { 
   lang: 'zh' | 'en', 
   materials: Textbook[],
   groups: TextbookGroup[],
   onManageMaterials: () => void,
-  onSaveHistory?: (module: string, summary: string, content: any, file?: File | { base64: string, mimeType: string }) => void
+  onSaveHistory?: (module: string, summary: string, content: any, file?: File | { base64: string, mimeType: string }) => void,
+  initialData?: any
 }) {
   const [topic, setTopic] = useState('');
   const [image, setImage] = useState<{ base64: string, mimeType: string } | null>(null);
@@ -26,8 +30,39 @@ export function MaterialAssistant({ lang, materials, groups, onManageMaterials, 
   const [showMaterialDropdown, setShowMaterialDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  const [initialParts, setInitialParts] = useState<any[]>([]);
+  const [chatHistory, setChatHistory] = useState<{role: 'user'|'model', text: string}[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatModel, setChatModel] = useState('gemini-3-flash-preview');
+  const [isChatting, setIsChatting] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    if (materials.length > 0 && selectedMaterialIds.length === 0) {
+    if (initialData) {
+      setTopic(initialData.topic || '');
+      setResult(initialData.result || '');
+      setChatHistory(initialData.chatHistory || []);
+      if (initialData.selectedMaterialIds) setSelectedMaterialIds(initialData.selectedMaterialIds);
+      if (initialData.image_url) {
+        fetch(initialData.image_url)
+          .then(res => res.blob())
+          .then(blob => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              const base64 = (reader.result as string).split(',')[1];
+              setImage({ base64, mimeType: blob.type });
+            };
+            reader.readAsDataURL(blob);
+          })
+          .catch(err => console.error('Failed to restore image', err));
+      } else {
+        setImage(null);
+      }
+    }
+  }, [initialData]);
+
+  useEffect(() => {
+    if (materials.length > 0 && selectedMaterialIds.length === 0 && !initialData) {
       setSelectedMaterialIds(materials.map(m => m.id));
     }
   }, [materials]);
@@ -41,13 +76,6 @@ export function MaterialAssistant({ lang, materials, groups, onManageMaterials, 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  const [initialParts, setInitialParts] = useState<any[]>([]);
-  const [chatHistory, setChatHistory] = useState<{role: 'user'|'model', text: string}[]>([]);
-  const [chatInput, setChatInput] = useState('');
-  const [chatModel, setChatModel] = useState('gemini-3.1-pro-preview');
-  const [isChatting, setIsChatting] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (chatEndRef.current) {
@@ -140,7 +168,7 @@ Requirements:
       setInitialParts(parts);
 
       const response = await ai.models.generateContentStream({
-        model: 'gemini-3.1-pro-preview',
+        model: chatModel,
         contents: { parts },
         config: {
           thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH }
@@ -155,7 +183,7 @@ Requirements:
       }
 
       if (onSaveHistory) {
-        onSaveHistory('material-assistant', topic || (lang === 'zh' ? '作文素材提取' : 'Material Extraction'), { topic, result: finalResult }, image || undefined);
+        onSaveHistory('material-assistant', topic || (lang === 'zh' ? '作文素材提取' : 'Material Extraction'), { topic, result: finalResult, chatHistory: [], selectedMaterialIds }, image || undefined);
       }
     } catch (err: any) {
       console.error(err);
@@ -174,8 +202,64 @@ Requirements:
     setIsChatting(true);
     
     try {
+      let currentInitialParts = initialParts;
+      if (currentInitialParts.length === 0 && selectedMaterialIds.length > 0) {
+        const parts: any[] = [];
+        const selectedMaterials = materials.filter(m => selectedMaterialIds.includes(m.id));
+        for (const material of selectedMaterials) {
+          try {
+            const response = await fetch(material.url);
+            if (!response.ok) throw new Error('Failed to fetch PDF');
+            const blob = await response.blob();
+            const base64 = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+            parts.push({
+              inlineData: {
+                data: base64,
+                mimeType: 'application/pdf'
+              }
+            });
+          } catch (err) {
+            console.error(`Failed to load material ${material.name}:`, err);
+          }
+        }
+        
+        if (image) {
+          parts.push({
+            inlineData: {
+              data: image.base64,
+              mimeType: image.mimeType
+            }
+          });
+        }
+        
+        const promptText = lang === 'zh' 
+          ? `你是一个专业的作文素材助手。请根据提供的素材书（PDF）和作文题（${topic ? `题目：${topic}` : '见附图'}），为我提取合适的写作素材。
+要求：
+1. 必须从提供的素材书中提取素材，不能凭空捏造。
+2. 提取的素材要与作文题高度相关。
+3. 给出素材的原文摘录，并提供简短的分析，说明该素材如何应用于这篇作文。
+4. 必须明确标出素材在素材书中的具体位置（如页码或章节）。
+5. 使用 Markdown 格式，结构清晰。`
+          : `You are a professional essay material assistant. Based on the provided material books (PDFs) and the essay topic (${topic ? `Topic: ${topic}` : 'see attached image'}), please extract suitable writing materials for me.
+Requirements:
+1. You MUST extract materials from the provided material books, do not fabricate.
+2. The extracted materials must be highly relevant to the essay topic.
+3. Provide excerpts of the materials and a brief analysis explaining how to apply them to this essay.
+4. You MUST explicitly state the specific location of the material in the material book (e.g., page number or chapter).
+5. Use Markdown format with clear structure.`;
+
+        parts.push({ text: promptText });
+        setInitialParts(parts);
+        currentInitialParts = parts;
+      }
+
       const contents = [
-        { role: 'user', parts: initialParts },
+        { role: 'user', parts: currentInitialParts },
         { role: 'model', parts: [{ text: result }] },
         ...chatHistory.map(msg => ({ role: msg.role, parts: [{ text: msg.text }] })),
         { role: 'user', parts: [{ text: newUserMsg.text }] }
@@ -199,6 +283,15 @@ Requirements:
           newHistory[newHistory.length - 1].text = modelResponseText;
           return newHistory;
         });
+      }
+      
+      if (onSaveHistory) {
+        onSaveHistory('material-assistant', topic || (lang === 'zh' ? '作文素材提取' : 'Material Extraction'), { 
+          topic, 
+          result, 
+          chatHistory: [...chatHistory, newUserMsg, { role: 'model', text: modelResponseText }],
+          selectedMaterialIds 
+        }, image || undefined);
       }
     } catch (err: any) {
       console.error(err);
@@ -457,32 +550,42 @@ Requirements:
               </div>
             ) : (
               <>
-                <div className="prose prose-invert prose-sm max-w-none">
-                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
-                    {result}
+                <div className="prose prose-invert prose-sm max-w-none markdown-body">
+                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                    {formatContent(result)}
                   </ReactMarkdown>
                 </div>
                 
                 {chatHistory.length > 0 && (
-                  <div className="mt-8 space-y-4 border-t border-white/10 pt-6">
+                  <div className="mt-8 space-y-8 border-t border-white/10 pt-8">
                     {chatHistory.map((msg, idx) => (
                       <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${msg.role === 'user' ? 'bg-emerald-500/20 text-emerald-100 border border-emerald-500/30' : 'bg-white/10 text-zinc-200 border border-white/10'}`}>
-                          <div className="prose prose-invert prose-sm max-w-none">
-                            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
-                              {msg.text}
-                            </ReactMarkdown>
+                        {msg.role === 'user' ? (
+                          <div className="max-w-[85%] rounded-2xl px-5 py-3 bg-white/10 text-zinc-100 border border-white/20 backdrop-blur-md shadow-lg">
+                            <div className="prose prose-invert prose-sm max-w-none markdown-body">
+                              <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                                {formatContent(msg.text)}
+                              </ReactMarkdown>
+                            </div>
                           </div>
-                        </div>
+                        ) : (
+                          <div className="w-full">
+                            <div className="prose prose-invert prose-sm max-w-none markdown-body">
+                              <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                                {formatContent(msg.text)}
+                              </ReactMarkdown>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
                 )}
                 {isChatting && chatHistory[chatHistory.length - 1]?.role === 'user' && (
-                  <div className="flex justify-start mt-4">
-                    <div className="bg-white/10 text-zinc-200 border border-white/10 rounded-2xl px-4 py-3 flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span className="text-sm text-zinc-400">{lang === 'zh' ? '思考中...' : 'Thinking...'}</span>
+                  <div className="flex justify-start mt-8">
+                    <div className="flex items-center gap-3 text-zinc-400">
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span className="text-sm">{lang === 'zh' ? '思考中...' : 'Thinking...'}</span>
                     </div>
                   </div>
                 )}
@@ -504,8 +607,9 @@ Requirements:
                     onChange={(e) => setChatModel(e.target.value)}
                     className="bg-zinc-900 border border-zinc-700 text-zinc-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-zinc-500 transition-colors"
                   >
-                    <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Deep Thinking)</option>
-                    <option value="gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>
+                    <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Advanced)</option>
+                    <option value="gemini-3-flash-preview">Gemini 3 Flash (Deep Thinking)</option>
+                    <option value="gemini-3.1-flash-lite-preview">Gemini 3.1 Flash Lite (Fast)</option>
                   </select>
                 </div>
                 <div className="flex items-end gap-2">

@@ -48,7 +48,7 @@ export default function ReadingCorrection({ lang, model }: { lang: 'zh' | 'en', 
       }`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview', // Flash is fast enough for this
+        model: 'gemini-3.1-flash-lite-preview', // Flash Lite is fast enough for this
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
@@ -156,7 +156,7 @@ ${material.englishText}
 Please listen to the audio and evaluate their pronunciation. Point out any mispronounced words, unnatural intonation, or areas for improvement. Be encouraging and provide specific corrections. Return the evaluation in ${lang === 'zh' ? 'Chinese' : 'English'}.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-3.1-flash-lite-preview',
         contents: [
           {
             role: 'user',

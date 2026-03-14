@@ -2,15 +2,15 @@ import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-export type GraphScanMode = 'gemini-3.1-pro-high' | 'gemini-3-flash-low';
+export type GraphScanMode = 'gemini-3.1-pro-preview' | 'gemini-3-flash-high' | 'gemini-3.1-flash-lite-low';
 
 export async function extractFunctionsFromImage(
   base64Image: string, 
   mimeType: string = "image/jpeg",
-  mode: GraphScanMode = 'gemini-3-flash-low'
+  mode: GraphScanMode = 'gemini-3.1-flash-lite-low'
 ): Promise<string[]> {
-  const model = mode === 'gemini-3.1-pro-high' ? "gemini-3.1-pro-preview" : "gemini-3-flash-preview";
-  const thinkingLevel = mode === 'gemini-3.1-pro-high' ? ThinkingLevel.HIGH : ThinkingLevel.LOW;
+  const model = mode === 'gemini-3.1-pro-preview' ? 'gemini-3.1-pro-preview' : mode === 'gemini-3-flash-high' ? "gemini-3-flash-preview" : "gemini-3.1-flash-lite-preview";
+  const thinkingLevel = mode === 'gemini-3.1-pro-preview' ? ThinkingLevel.HIGH : mode === 'gemini-3-flash-high' ? ThinkingLevel.HIGH : ThinkingLevel.LOW;
   
   const response = await ai.models.generateContent({
     model: model,

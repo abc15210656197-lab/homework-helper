@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
-import { evaluate } from 'mathjs';
+import { evaluate, compile } from 'mathjs';
 import { Save, RotateCcw } from 'lucide-react';
 
 interface GraphViewProps {
@@ -143,7 +143,7 @@ const GraphView: React.FC<GraphViewProps> = ({ functions, parameters = {}, onSav
         .attr("fill", "#71717a");
 
       // Plot functions
-      functions.forEach(({ expression, color }) => {
+      functions.forEach(({ expression, color }, index) => {
         if (!expression) return;
 
         const MAX_PIXEL = 50000;
@@ -163,7 +163,7 @@ const GraphView: React.FC<GraphViewProps> = ({ functions, parameters = {}, onSav
         const dx = (xDomain[1] - xDomain[0]) / samples;
         
         let normalizedExpr = expression
-          .replace(/f\(x\)\s*=/g, '')
+          .replace(/[a-zA-Z]\(x\)\s*=/g, '')
           .replace(/y\s*=/g, '')
           .replace(/sin\^-1/gi, 'asin')
           .replace(/cos\^-1/gi, 'acos')
@@ -174,7 +174,8 @@ const GraphView: React.FC<GraphViewProps> = ({ functions, parameters = {}, onSav
           .replace(/\\arcsin/g, 'asin')
           .replace(/\\arccos/g, 'acos')
           .replace(/\\arctan/g, 'atan')
-          .replace(/\\ln/g, 'ln')
+          .replace(/\\ln/g, 'log')
+          .replace(/\bln\b/g, 'log')
           .replace(/\\log_2/g, 'log2')
           .replace(/\\log_\{2\}/g, 'log2')
           .replace(/\\log_{10}/g, 'log10')
@@ -201,20 +202,236 @@ const GraphView: React.FC<GraphViewProps> = ({ functions, parameters = {}, onSav
           const placeholders: string[] = [];
           const sortedFns = [...functions].sort((a, b) => b.length - a.length);
           sortedFns.forEach((fn, i) => {
-            const placeholder = `\uE000${i}\uE000`;
+            const placeholder = ` \uE000${i}\uE000 `;
             processed = processed.replace(new RegExp(fn, 'gi'), placeholder);
             placeholders[i] = fn;
           });
           processed = processed.replace(/([a-z])([a-z])/gi, '$1 $2');
           processed = processed.replace(/([a-z])([a-z])/gi, '$1 $2');
           sortedFns.forEach((fn, i) => {
-            processed = processed.replace(new RegExp(`\uE000${i}\uE000`, 'g'), fn);
+            processed = processed.replace(new RegExp(` \\uE000${i}\\uE000 `, 'g'), fn);
           });
           return processed;
         };
 
         normalizedExpr = splitImplicitMultiplication(normalizedExpr);
 
+        if (normalizedExpr.includes('=')) {
+          const parts = normalizedExpr.split('=');
+          if (parts.length === 2) {
+            const implicitExpr = `(${parts[0]}) - (${parts[1]})`;
+            
+            const resX = 150;
+            const resY = 150;
+            const dxGrid = (xDomain[1] - xDomain[0]) / resX;
+            const dyGrid = (yDomain[1] - yDomain[0]) / resY;
+            
+            const values = new Array(resX * resY);
+            let minVal = Infinity;
+            let maxVal = -Infinity;
+            
+            let compiled;
+            try {
+              compiled = compile(implicitExpr);
+            } catch (e) {
+              return;
+            }
+            
+            for (let j = 0; j < resY; j++) {
+              const y = yDomain[1] - j * dyGrid;
+              for (let i = 0; i < resX; i++) {
+                const x = xDomain[0] + i * dxGrid;
+                const scope: any = { x, y, pi: Math.PI, e: Math.E };
+                Object.keys(parameters).forEach(key => {
+                  scope[key] = parameters[key].value;
+                });
+                try {
+                  let val = compiled.evaluate(scope);
+                  if (val && typeof val === 'object' && 're' in val) {
+                    val = Math.abs(val.im) < 1e-10 ? val.re : NaN;
+                  }
+                  values[j * resX + i] = typeof val === 'number' ? val : NaN;
+                  if (!isNaN(val)) {
+                    if (val < minVal) minVal = val;
+                    if (val > maxVal) maxVal = val;
+                  }
+                } catch (e) {
+                  values[j * resX + i] = NaN;
+                }
+              }
+            }
+
+            // Asymptote filtering
+            const evaluateAt = (i: number, j: number) => {
+              const x = xDomain[0] + i * dxGrid;
+              const y = yDomain[1] - j * dyGrid;
+              const scope: any = { x, y, pi: Math.PI, e: Math.E };
+              Object.keys(parameters).forEach(key => { scope[key] = parameters[key].value; });
+              try {
+                let val = compiled.evaluate(scope);
+                if (val && typeof val === 'object' && 're' in val) {
+                  val = Math.abs(val.im) < 1e-10 ? val.re : NaN;
+                }
+                return typeof val === 'number' ? val : NaN;
+              } catch (e) {
+                return NaN;
+              }
+            };
+
+            for (let j = 0; j < resY; j++) {
+              for (let i = 0; i < resX; i++) {
+                const idx = j * resX + i;
+                const v1 = values[idx];
+                if (isNaN(v1)) continue;
+
+                // Check right edge
+                if (i < resX - 1) {
+                  const v2 = values[idx + 1];
+                  if (!isNaN(v2) && v1 * v2 < 0) {
+                    // Sub-sample the cell edge to detect poles (asymptotes)
+                    const s1 = evaluateAt(i + 0.25, j);
+                    const s2 = evaluateAt(i + 0.5, j);
+                    const s3 = evaluateAt(i + 0.75, j);
+                    const maxEdgeVal = Math.max(Math.abs(v1), Math.abs(v2));
+                    const maxSampleVal = Math.max(
+                      isNaN(s1) ? Infinity : Math.abs(s1),
+                      isNaN(s2) ? Infinity : Math.abs(s2),
+                      isNaN(s3) ? Infinity : Math.abs(s3)
+                    );
+                    
+                    // If any sample is significantly larger than the edge values, it's a pole
+                    if (maxSampleVal > Math.max(10, maxEdgeVal * 2)) {
+                      values[idx] = NaN;
+                      values[idx + 1] = NaN;
+                    }
+                  }
+                }
+                
+                // Check bottom edge
+                if (j < resY - 1) {
+                  const v3 = values[idx + resX];
+                  if (!isNaN(v3) && v1 * v3 < 0) {
+                    const s1 = evaluateAt(i, j + 0.25);
+                    const s2 = evaluateAt(i, j + 0.5);
+                    const s3 = evaluateAt(i, j + 0.75);
+                    const maxEdgeVal = Math.max(Math.abs(v1), Math.abs(v3));
+                    const maxSampleVal = Math.max(
+                      isNaN(s1) ? Infinity : Math.abs(s1),
+                      isNaN(s2) ? Infinity : Math.abs(s2),
+                      isNaN(s3) ? Infinity : Math.abs(s3)
+                    );
+                    
+                    if (maxSampleVal > Math.max(10, maxEdgeVal * 2)) {
+                      values[idx] = NaN;
+                      values[idx + resX] = NaN;
+                    }
+                  }
+                }
+              }
+            }
+            
+            if (minVal <= 0 && maxVal >= 0) {
+              const contours = d3.contours()
+                .size([resX, resY])
+                .thresholds([0])
+                (values);
+                
+              const lineStrings: number[][][] = [];
+              contours.forEach(contour => {
+                if (contour.type === 'MultiPolygon') {
+                  contour.coordinates.forEach(polygon => {
+                    polygon.forEach(ring => {
+                      let currentLine: number[][] = [];
+                      ring.forEach(pt => {
+                        const x = xDomain[0] + pt[0] * dxGrid;
+                        const y = yDomain[1] - pt[1] * dyGrid;
+                        const scope: any = { x, y, pi: Math.PI, e: Math.E };
+                        Object.keys(parameters).forEach(key => { scope[key] = parameters[key].value; });
+                        let val: any = NaN;
+                        try {
+                          val = compiled.evaluate(scope);
+                          if (val && typeof val === 'object' && 're' in val) {
+                            val = Math.abs(val.im) < 1e-10 ? val.re : NaN;
+                          }
+                        } catch (e) {}
+                        
+                        const i0 = Math.floor(pt[0]);
+                        const i1 = Math.ceil(pt[0]);
+                        const j0 = Math.floor(pt[1]);
+                        const j1 = Math.ceil(pt[1]);
+                        const v00 = values[j0 * resX + i0];
+                        const v01 = values[j0 * resX + i1];
+                        const v10 = values[j1 * resX + i0];
+                        const v11 = values[j1 * resX + i1];
+                        
+                        let isAsymptote = false;
+                        if (isNaN(v00) || isNaN(v01) || isNaN(v10) || isNaN(v11)) {
+                          isAsymptote = true;
+                        } else if (typeof val === 'number' && !isNaN(val)) {
+                           // If the value is large, it might be an asymptote or just a steep curve.
+                           // To distinguish, we check if the function actually crosses 0 smoothly.
+                           // An asymptote jumps from -inf to +inf, so the gradient is massive.
+                           // We can check the values at the corners of the cell.
+                           const maxCornerVal = Math.max(Math.abs(v00), Math.abs(v01), Math.abs(v10), Math.abs(v11));
+                           
+                           // If the true value at the interpolated root is larger than the corner values,
+                           // it means the interpolation is wildly wrong, which happens at asymptotes.
+                           if (Math.abs(val) > Math.max(5, maxCornerVal)) {
+                             isAsymptote = true;
+                           }
+                        } else {
+                           isAsymptote = true; // NaN means undefined, likely asymptote
+                        }
+
+                        if (!isAsymptote) {
+                          currentLine.push(pt);
+                        } else {
+                          if (currentLine.length > 1) {
+                            lineStrings.push(currentLine);
+                          }
+                          currentLine = [];
+                        }
+                      });
+                      if (currentLine.length > 1) {
+                        lineStrings.push(currentLine);
+                      }
+                    });
+                  });
+                }
+              });
+
+              const multiLineString = {
+                type: 'MultiLineString',
+                coordinates: lineStrings
+              };
+                
+              const transform = d3.geoTransform({
+                point: function(x, y) {
+                  const px = xScale(xDomain[0] + x * dxGrid);
+                  const py = yScale(yDomain[1] - y * dyGrid);
+                  this.stream.point(px, py);
+                }
+              });
+              
+              const path = d3.geoPath().projection(transform);
+              
+              g.selectAll(`path.implicit-${index}`)
+                .data([multiLineString])
+                .enter()
+                .append("path")
+                .attr("class", `implicit-${index}`)
+                .attr("fill", "none")
+                .attr("stroke", color)
+                .attr("stroke-width", 2.5)
+                .attr("stroke-linecap", "round")
+                .attr("stroke-linejoin", "round")
+                .attr("d", path as any);
+            }
+            return;
+          }
+        }
+
+        let prevY = NaN;
         for (let x = xDomain[0]; x <= xDomain[1]; x += dx) {
           try {
             const scope: any = { x, pi: Math.PI, e: Math.E, ans: 0 };
@@ -241,11 +458,47 @@ const GraphView: React.FC<GraphViewProps> = ({ functions, parameters = {}, onSav
             if (typeof y === 'number') {
               if (y === Infinity) y = 1e100;
               if (y === -Infinity) y = -1e100;
+              
+              if (!isNaN(prevY)) {
+                const dy = y - prevY;
+                const height = yDomain[1] - yDomain[0];
+                // Check for large jumps OR sign changes (potential asymptotes)
+                if (Math.abs(dy) > height * 0.3 || (y * prevY < 0)) {
+                  try {
+                    const midScope = { ...scope, x: x - dx / 2 };
+                    let midY = evaluate(normalizedExpr, midScope);
+                    if (midY && typeof midY === 'object' && 're' in midY) {
+                      midY = Math.abs(midY.im) < 1e-10 ? midY.re : NaN;
+                    }
+                    if (typeof midY === 'number') {
+                      if (midY === Infinity) midY = 1e100;
+                      if (midY === -Infinity) midY = -1e100;
+                      
+                      const expectedY = (prevY + y) / 2;
+                      // If the actual midpoint deviates from the linear interpolation by more than a threshold,
+                      // or if it's a huge jump crossing zero, it's an asymptote.
+                      // For sign changes (roots vs asymptotes), a root is linear-ish, an asymptote is not.
+                      const deviation = Math.abs(midY - expectedY);
+                      const threshold = Math.max(Math.abs(dy) * 0.1, height * 0.05);
+                      
+                      if (isNaN(midY) || deviation > threshold) {
+                        points.push([x - dx / 2, NaN]);
+                      }
+                    } else {
+                      points.push([x - dx / 2, NaN]);
+                    }
+                  } catch (e) {
+                    points.push([x - dx / 2, NaN]);
+                  }
+                }
+              }
             }
             
             points.push([x, typeof y === 'number' ? y : NaN]);
+            prevY = typeof y === 'number' ? y : NaN;
           } catch (e) {
             points.push([x, NaN]);
+            prevY = NaN;
           }
         }
 

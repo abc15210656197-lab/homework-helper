@@ -2,6 +2,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Mic, Square, Play, RefreshCw, BookOpen, CheckCircle, AlertCircle, FileText, Plus, Loader2, ChevronDown } from 'lucide-react';
 import { GoogleGenAI, Type, Modality } from '@google/genai';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import { formatContent } from '../utils/formatUtils';
 import { addWavHeader } from '../utils/audioUtils';
 
 const ARTICLES: {
@@ -145,7 +149,7 @@ export function ReadingCoach({ lang, onSaveHistory }: ReadingCoachProps) {
       }`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-3.1-flash-lite-preview',
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
@@ -298,7 +302,7 @@ IMPORTANT:
 }`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.1-flash-lite-preview',
         contents: [
           {
             role: 'user',
@@ -681,8 +685,10 @@ IMPORTANT:
                     </div>
                   )}
 
-                  <div className="prose prose-invert prose-emerald max-w-none text-sm">
-                    <ReactMarkdown>{evaluationResult}</ReactMarkdown>
+                  <div className="prose prose-invert prose-emerald max-w-none text-sm markdown-body">
+                    <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                      {formatContent(evaluationResult)}
+                    </ReactMarkdown>
                   </div>
                 </div>
               )}

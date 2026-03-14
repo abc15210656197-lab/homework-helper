@@ -1,7 +1,7 @@
 export const MODELS = [
-  { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro', desc: '最强推理，适合复杂题目' },
-  { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro', desc: '性能均衡，通用性强' },
-  { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', desc: '速度最快，响应迅速' },
+  { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro', desc: '推理最强，适合复杂任务' },
+  { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', desc: '性能均衡，通用性强' },
+  { id: 'gemini-3.1-flash-lite-preview', name: 'Gemini 3.1 Flash Lite', desc: '速度最快，响应迅速' },
 ];
 
 export const TRANSLATIONS = {

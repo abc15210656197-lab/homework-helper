@@ -36,12 +36,19 @@ try {
   // Column already exists or other error
 }
 
-// Initialize ImageKit
-const imagekit = new ImageKit({
-  publicKey: process.env.IMAGEKIT_PUBLIC_KEY || '',
-  privateKey: process.env.IMAGEKIT_PRIVATE_KEY || '',
-  urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT || '',
-});
+// Initialize ImageKit lazily
+let imagekit: ImageKit | null = null;
+try {
+  if (process.env.IMAGEKIT_PUBLIC_KEY && process.env.IMAGEKIT_PRIVATE_KEY && process.env.IMAGEKIT_URL_ENDPOINT) {
+    imagekit = new ImageKit({
+      publicKey: process.env.IMAGEKIT_PUBLIC_KEY,
+      privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
+      urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT,
+    });
+  }
+} catch (e) {
+  console.error("Failed to initialize ImageKit:", e);
+}
 
 // Setup Multer for memory storage
 const upload = multer({ storage: multer.memoryStorage() });
@@ -57,7 +64,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    if (!process.env.IMAGEKIT_PUBLIC_KEY || !process.env.IMAGEKIT_PRIVATE_KEY || !process.env.IMAGEKIT_URL_ENDPOINT) {
+    if (!imagekit) {
       return res.status(500).json({ error: 'ImageKit credentials not configured in .env' });
     }
 
@@ -78,7 +85,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 });
 
 // Save History Record
-app.post('/api/history', (req, res) => {
+app.post('/api/records', async (req, res) => {
   try {
     const { module, summary, content, imageUrl, imageFileId, uid } = req.body;
     
@@ -86,12 +93,34 @@ app.post('/api/history', (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
+    let finalContent = JSON.stringify(content);
+
+    if (imagekit) {
+      try {
+        const buffer = Buffer.from(finalContent, 'utf-8');
+        const response = await imagekit.upload({
+          file: buffer,
+          fileName: `history_${module}_${Date.now()}.json`,
+          folder: '/ai_study_assistant/history',
+          useUniqueFileName: true
+        });
+        
+        finalContent = JSON.stringify({
+          isCloudFile: true,
+          url: response.url,
+          fileId: response.fileId
+        });
+      } catch (uploadError) {
+        console.error('Failed to upload content to ImageKit, falling back to DB storage:', uploadError);
+      }
+    }
+
     const stmt = db.prepare(`
       INSERT INTO history (module, summary, content, image_url, image_file_id, uid)
       VALUES (?, ?, ?, ?, ?, ?)
     `);
     
-    const info = stmt.run(module, summary, JSON.stringify(content), imageUrl || null, imageFileId || null, uid || null);
+    const info = stmt.run(module, summary, finalContent, imageUrl || null, imageFileId || null, uid || null);
     
     res.json({ id: info.lastInsertRowid, success: true });
   } catch (error) {
@@ -101,7 +130,7 @@ app.post('/api/history', (req, res) => {
 });
 
 // Get History Records
-app.get('/api/history', (req, res) => {
+app.get('/api/records', (req, res) => {
   try {
     const { module, uid } = req.query;
     let stmt;
@@ -126,7 +155,7 @@ app.get('/api/history', (req, res) => {
 });
 
 // Delete History Records by Time Period
-app.delete('/api/history', async (req, res) => {
+app.delete('/api/records', async (req, res) => {
   try {
     const { period, uid } = req.query; // 'all', '7days', '30days'
     
@@ -151,20 +180,35 @@ app.delete('/api/history', async (req, res) => {
       return res.status(400).json({ error: 'Invalid period specified' });
     }
 
-    // First, find all records that match the condition and have an image_file_id
-    const selectStmt = db.prepare(`SELECT image_file_id FROM history WHERE ${dateCondition} AND uid = ? AND image_file_id IS NOT NULL`);
+    // First, find all records that match the condition
+    const selectStmt = db.prepare(`SELECT content, image_file_id FROM history WHERE ${dateCondition} AND uid = ?`);
     const recordsToDelete = selectStmt.all(uid);
 
-    // Delete images from ImageKit
-    if (recordsToDelete.length > 0 && process.env.IMAGEKIT_PRIVATE_KEY) {
-      const fileIds = recordsToDelete.map((r: any) => r.image_file_id);
+    // Delete images and cloud files from ImageKit
+    if (recordsToDelete.length > 0 && imagekit) {
+      const fileIds: string[] = [];
       
-      // ImageKit bulk delete API
-      try {
-        await imagekit.bulkDeleteFiles(fileIds);
-      } catch (ikError) {
-        console.error('Failed to delete some files from ImageKit:', ikError);
-        // We continue to delete from local DB even if ImageKit fails partially
+      recordsToDelete.forEach((r: any) => {
+        if (r.image_file_id) {
+          fileIds.push(r.image_file_id);
+        }
+        try {
+          const parsedContent = JSON.parse(r.content);
+          if (parsedContent && parsedContent.isCloudFile && parsedContent.fileId) {
+            fileIds.push(parsedContent.fileId);
+          }
+        } catch (e) {
+          // Ignore parse errors
+        }
+      });
+      
+      if (fileIds.length > 0) {
+        try {
+          await imagekit.bulkDeleteFiles(fileIds);
+        } catch (ikError) {
+          console.error('Failed to delete some files from ImageKit:', ikError);
+          // We continue to delete from local DB even if ImageKit fails partially
+        }
       }
     }
 

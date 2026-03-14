@@ -34,7 +34,7 @@ export function HistoryDrawer({ isOpen, onClose, lang, onSelectRecord, uid }: Hi
     }
     setLoading(true);
     try {
-      const res = await fetch(`/api/history?uid=${uid}`);
+      const res = await fetch(`/api/records?uid=${encodeURIComponent(uid)}`);
       if (res.ok) {
         const data = await res.json();
         setRecords(data);
@@ -56,7 +56,7 @@ export function HistoryDrawer({ isOpen, onClose, lang, onSelectRecord, uid }: Hi
     if (!uid) return;
     setDeleting(true);
     try {
-      const res = await fetch(`/api/history?period=${deletePeriod}&uid=${uid}`, {
+      const res = await fetch(`/api/records?period=${deletePeriod}&uid=${encodeURIComponent(uid)}`, {
         method: 'DELETE',
       });
       if (res.ok) {
