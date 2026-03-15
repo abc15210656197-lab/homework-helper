@@ -5,12 +5,13 @@ import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import rehypeKatex from 'rehype-katex';
-import { Upload, Copy, Check, FileImage, Loader2, Trash2, AlertCircle, Camera, ArrowLeft, Info, BookOpen, ChevronRight, MessageCircle, Mic, Send, ChevronLeft, Maximize2, X, Book, FileText, Headphones, LineChart, Plus, Edit2, Palette, Globe, Keyboard, Image as ImageIcon, RefreshCw, Clock, Folder, LogIn, LogOut, PenTool } from 'lucide-react';
+import { Upload, Copy, Check, FileImage, Loader2, Trash2, AlertCircle, Camera, ArrowLeft, Info, BookOpen, ChevronRight, MessageCircle, Mic, Send, ChevronLeft, Maximize2, X, Book, FileText, Headphones, LineChart, Plus, Edit2, Palette, Globe, Keyboard, Image as ImageIcon, RefreshCw, Clock, Folder, LogIn, LogOut, PenTool, HelpCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { InlineMath } from 'react-katex';
 
 import { MODELS, TRANSLATIONS } from './constants';
 import { AudioTutorView } from './components/AudioTutor';
+import { UserGuideModal } from './components/UserGuideModal';
 import { TextbookManager, Textbook, TextbookGroup } from './components/TextbookManager';
 import { ReadingCoach } from './components/ReadingCoach';
 import GraphView from './components/GraphView';
@@ -973,6 +974,7 @@ export default function App() {
   const [materialAssistantData, setMaterialAssistantData] = useState<any>(null);
   const [essayFeedbackData, setEssayFeedbackData] = useState<any>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isUserGuideOpen, setIsUserGuideOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
@@ -1636,83 +1638,90 @@ CRITICAL INSTRUCTIONS:
     <div className={`min-h-screen bg-black text-zinc-100 font-sans selection:bg-zinc-800 selection:text-white relative flex flex-col`}>
       <BackgroundLines />
       <div className={`max-w-4xl mx-auto px-4 py-4 md:py-8 relative z-10 flex-1 flex flex-col w-full`}>
-        <header className="mb-4 text-center p-3 pt-12 md:pt-3 rounded-2xl border border-white/10 backdrop-blur-2xl shadow-2xl relative shrink-0 liquid-panel">
-          <div className="absolute top-3 right-3 flex items-center gap-3">
-            {user ? (
-              <div className="relative">
-                <button 
-                  onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="flex items-center gap-2 focus:outline-none"
-                >
-                  {user.photoURL && <img src={user.photoURL} alt={user.displayName || ''} className="w-6 h-6 rounded-full border border-white/20 hover:border-white/40 transition-colors" />}
-                </button>
-                
-                <AnimatePresence>
-                  {showUserMenu && (
-                    <>
-                      <div 
-                        className="fixed inset-0 z-40" 
-                        onClick={() => setShowUserMenu(false)}
-                      />
-                      <motion.div
-                        initial={{ opacity: 0, y: 5, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 5, scale: 0.95 }}
-                        transition={{ duration: 0.15 }}
-                        className="absolute right-0 top-full mt-2 w-28 bg-zinc-900/90 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50"
-                      >
-                        <button
-                          onClick={() => {
-                            setShowUserMenu(false);
-                            handleLogout();
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
-                        >
-                          <LogOut className="w-4 h-4" />
-                          {language === 'zh' ? '注销' : 'Logout'}
-                        </button>
-                      </motion.div>
-                    </>
-                  )}
-                </AnimatePresence>
-              </div>
-            ) : (
-              <button
-                onClick={handleLogin}
-                className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-xs text-zinc-300 transition-colors h-6"
+        <div className="flex justify-end items-center gap-3 mb-4">
+          {user ? (
+            <div className="relative">
+              <button 
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="flex items-center gap-2 focus:outline-none"
               >
-                <LogIn className="w-3.5 h-3.5" />
-                {language === 'zh' ? '登录' : 'Login'}
+                {user.photoURL && <img src={user.photoURL} alt={user.displayName || ''} className="w-6 h-6 rounded-full border border-white/20 hover:border-white/40 transition-colors" />}
               </button>
-            )}
+              
+              <AnimatePresence>
+                {showUserMenu && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-40" 
+                      onClick={() => setShowUserMenu(false)}
+                    />
+                    <motion.div
+                      initial={{ opacity: 0, y: 5, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 5, scale: 0.95 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute right-0 top-full mt-2 w-28 bg-zinc-900/90 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50"
+                    >
+                      <button
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          handleLogout();
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        {language === 'zh' ? '注销' : 'Logout'}
+                      </button>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
+          ) : (
             <button
-              onClick={() => setIsHistoryOpen(true)}
+              onClick={handleLogin}
               className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-xs text-zinc-300 transition-colors h-6"
             >
-              <Clock className="w-3.5 h-3.5" />
-              {language === 'zh' ? '历史' : 'History'}
+              <LogIn className="w-3.5 h-3.5" />
+              {language === 'zh' ? '登录' : 'Login'}
             </button>
-            <div 
-              className="flex items-center bg-white/5 border border-white/10 rounded-full p-0.5 cursor-pointer relative w-[64px] h-6 select-none group hover:border-white/20 transition-colors"
-              onClick={() => setLanguage(prev => prev === 'zh' ? 'en' : 'zh')}
-            >
-              <motion.div
-                className="absolute inset-y-0.5 bg-white/10 border border-white/20 rounded-full shadow-inner"
-                initial={false}
-                animate={{ 
-                  x: language === 'zh' ? 0 : 30,
-                  width: 30
-                }}
-                transition={{ type: "spring", stiffness: 500, damping: 35 }}
-              />
-              <div className={`flex-1 text-center text-[9px] font-black z-10 transition-colors duration-300 ${language === 'zh' ? 'text-white' : 'text-zinc-500'}`}>
-                中
-              </div>
-              <div className={`flex-1 text-center text-[9px] font-black z-10 transition-colors duration-300 ${language === 'en' ? 'text-white' : 'text-zinc-500'}`}>
-                EN
-              </div>
+          )}
+          <button
+            onClick={() => setIsHistoryOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-xs text-zinc-300 transition-colors h-6"
+          >
+            <Clock className="w-3.5 h-3.5" />
+            {language === 'zh' ? '历史' : 'History'}
+          </button>
+          <button
+            onClick={() => setIsUserGuideOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-xs text-zinc-300 transition-colors h-6"
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+            {language === 'zh' ? '使用指引' : 'Guide'}
+          </button>
+          <div 
+            className="flex items-center bg-white/5 border border-white/10 rounded-full p-0.5 cursor-pointer relative w-[64px] h-6 select-none group hover:border-white/20 transition-colors"
+            onClick={() => setLanguage(prev => prev === 'zh' ? 'en' : 'zh')}
+          >
+            <motion.div
+              className="absolute inset-y-0.5 bg-white/10 border border-white/20 rounded-full shadow-inner"
+              initial={false}
+              animate={{ 
+                x: language === 'zh' ? 0 : 30,
+                width: 30
+              }}
+              transition={{ type: "spring", stiffness: 500, damping: 35 }}
+            />
+            <div className={`flex-1 text-center text-[9px] font-black z-10 transition-colors duration-300 ${language === 'zh' ? 'text-white' : 'text-zinc-500'}`}>
+              中
+            </div>
+            <div className={`flex-1 text-center text-[9px] font-black z-10 transition-colors duration-300 ${language === 'en' ? 'text-white' : 'text-zinc-500'}`}>
+              EN
             </div>
           </div>
+        </div>
+        <header className="mb-4 text-center p-3 md:p-4 rounded-2xl border border-white/10 backdrop-blur-2xl shadow-2xl relative shrink-0 liquid-panel">
           <motion.h1 
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -2577,6 +2586,12 @@ CRITICAL INSTRUCTIONS:
         onSelectRecord={handleSelectHistoryRecord}
         lang={language}
         uid={user?.uid}
+      />
+
+      <UserGuideModal
+        isOpen={isUserGuideOpen}
+        onClose={() => setIsUserGuideOpen(false)}
+        lang={language}
       />
     </div>
   );

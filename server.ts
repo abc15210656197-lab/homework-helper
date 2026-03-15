@@ -50,6 +50,65 @@ try {
   console.error("Failed to initialize ImageKit:", e);
 }
 
+// Cloud Sync Functions
+async function syncToCloud(uid: string) {
+  if (!imagekit) return;
+  try {
+    const stmt = db.prepare('SELECT * FROM history WHERE uid = ? ORDER BY created_at DESC');
+    const records = stmt.all(uid);
+    const buffer = Buffer.from(JSON.stringify(records), 'utf-8');
+    await imagekit.upload({
+      file: buffer,
+      fileName: `history_backup_${uid}.json`,
+      folder: '/ai_study_assistant/backups',
+      useUniqueFileName: false,
+      overwriteFile: true
+    });
+    console.log(`Synced ${records.length} records to cloud for user ${uid}`);
+  } catch (e) {
+    console.error('Failed to sync to cloud:', e);
+  }
+}
+
+async function restoreFromCloudIfNeeded(uid: string) {
+  if (!imagekit || !process.env.IMAGEKIT_URL_ENDPOINT) return;
+  try {
+    const countStmt = db.prepare('SELECT COUNT(*) as count FROM history WHERE uid = ?');
+    const { count } = countStmt.get(uid) as any;
+    
+    if (count === 0) {
+      console.log(`Local DB empty for user ${uid}, attempting to restore from cloud...`);
+      // Construct the URL directly to avoid listFiles API call
+      let endpoint = process.env.IMAGEKIT_URL_ENDPOINT;
+      if (endpoint.endsWith('/')) endpoint = endpoint.slice(0, -1);
+      
+      const url = `${endpoint}/ai_study_assistant/backups/history_backup_${uid}.json?t=${Date.now()}`;
+      const response = await fetch(url);
+      
+      if (response.ok) {
+        const records = await response.json();
+        if (Array.isArray(records) && records.length > 0) {
+          const insertStmt = db.prepare(`
+            INSERT OR IGNORE INTO history (id, module, summary, content, image_url, image_file_id, uid, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `);
+          const transaction = db.transaction((recs) => {
+            for (const r of recs) {
+              insertStmt.run(r.id, r.module, r.summary, r.content, r.image_url, r.image_file_id, r.uid, r.created_at);
+            }
+          });
+          transaction(records);
+          console.log(`Restored ${records.length} records from cloud for user ${uid}`);
+        }
+      } else {
+        console.log(`No cloud backup found for user ${uid} (status: ${response.status})`);
+      }
+    }
+  } catch (e) {
+    console.error('Failed to restore from cloud:', e);
+  }
+}
+
 // Setup Multer for memory storage
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -122,6 +181,10 @@ app.post('/api/records', async (req, res) => {
     
     const info = stmt.run(module, summary, finalContent, imageUrl || null, imageFileId || null, uid || null);
     
+    if (uid) {
+      syncToCloud(uid); // Fire and forget
+    }
+    
     res.json({ id: info.lastInsertRowid, success: true });
   } catch (error) {
     console.error('Save history error:', error);
@@ -130,9 +193,14 @@ app.post('/api/records', async (req, res) => {
 });
 
 // Get History Records
-app.get('/api/records', (req, res) => {
+app.get('/api/records', async (req, res) => {
   try {
-    const { module, uid } = req.query;
+    const { module, uid } = req.query as { module?: string, uid?: string };
+    
+    if (uid) {
+      await restoreFromCloudIfNeeded(uid);
+    }
+
     let stmt;
     
     if (module && uid) {
@@ -215,6 +283,10 @@ app.delete('/api/records', async (req, res) => {
     // Delete from local database
     const deleteStmt = db.prepare(`DELETE FROM history WHERE ${dateCondition} AND uid = ?`);
     const info = deleteStmt.run(uid);
+
+    if (uid) {
+      syncToCloud(uid as string); // Fire and forget
+    }
 
     res.json({ success: true, deletedCount: info.changes });
   } catch (error) {

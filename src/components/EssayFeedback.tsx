@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, X, Edit2, Download, FileText, File, FileCode, AlertCircle, Sparkles, ChevronRight, ChevronLeft, Upload, Image as ImageIcon, Trash2, Folder, Book, History, Undo2, Redo2, Clock } from 'lucide-react';
 import { Textbook, TextbookGroup } from './TextbookManager';
@@ -61,13 +61,29 @@ export function EssayFeedback({ lang, onSaveHistory, initialData, materials = []
   const [tempParaText, setTempParaText] = useState('');
   const [isParaAiLoading, setIsParaAiLoading] = useState(false);
   const [hoveredParaIndex, setHoveredParaIndex] = useState<number | null>(null);
+  const [activeParaIndex, setActiveParaIndex] = useState<number | null>(null);
+  const [paraAiModel, setParaAiModel] = useState(selectedModel);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    setParaAiModel(selectedModel);
+  }, [selectedModel]);
 
   // History State
   const [historyStack, setHistoryStack] = useState<Array<{ essay: string, annotations: Annotation[] }>>([]);
   const [historyPointer, setHistoryPointer] = useState(-1);
   const [historyLog, setHistoryLog] = useState<Array<{ id: string, paraIndex: number, oldParaText: string, newParaText: string, label: string, timestamp: number, type: 'annotation' | 'paragraph' }>>([]);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
+
+  // Global Chat State
+  const [globalChatInput, setGlobalChatInput] = useState('');
+  const [globalChatHistory, setGlobalChatHistory] = useState<Array<{ role: 'user' | 'model', text: string }>>([]);
+  const [isGlobalChatLoading, setIsGlobalChatLoading] = useState(false);
+  const [globalChatModel, setGlobalChatModel] = useState(selectedModel);
+
+  useEffect(() => {
+    setGlobalChatModel(selectedModel);
+  }, [selectedModel]);
 
   const pushToHistory = (newEssay: string, newAnnotations: Annotation[]) => {
     const newState = { essay: newEssay, annotations: [...newAnnotations] };
@@ -96,16 +112,30 @@ export function EssayFeedback({ lang, onSaveHistory, initialData, materials = []
   };
 
   useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.paragraph-container')) {
+        setActiveParaIndex(null);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
     if (editingParaIndex !== null && textareaRef.current) {
       textareaRef.current.style.height = 'auto';
       textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
     }
-  }, [editingParaIndex, tempParaText]);
+  }, [editingParaIndex]);
 
   useEffect(() => {
     if (initialData) {
-      setEssay(initialData.essay || '');
-      setAnnotations(initialData.annotations || []);
+      const loadedEssay = initialData.essay || (initialData.summary && initialData.summary.detected_essay) || '';
+      const loadedAnnotations = initialData.annotations || [];
+      
+      setEssay(loadedEssay);
+      setAnnotations(loadedAnnotations);
       setSummary(initialData.summary || null);
       if (initialData.selectedMaterialIds) {
         setSelectedMaterialIds(initialData.selectedMaterialIds);
@@ -113,6 +143,35 @@ export function EssayFeedback({ lang, onSaveHistory, initialData, materials = []
       if (initialData.annotations && initialData.annotations.length > 0) {
         setViewMode('canvas');
       }
+
+      const fetchImages = async (urls: string[]) => {
+        return Promise.all(urls.map(async url => {
+          try {
+            const res = await fetch(url);
+            const blob = await res.blob();
+            const base64 = await new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+              reader.readAsDataURL(blob);
+            });
+            return { url, base64, mimeType: blob.type, file: new window.File([blob], 'image.jpg', { type: blob.type }) };
+          } catch (e) {
+            return { url, base64: '', mimeType: 'image/jpeg', file: new window.File([], 'image.jpg') };
+          }
+        }));
+      };
+      
+      if (initialData.refImageUrls) {
+        fetchImages(initialData.refImageUrls).then(setRefImages);
+      }
+      if (initialData.essayImageUrls) {
+        fetchImages(initialData.essayImageUrls).then(setEssayImages);
+      }
+
+      // Initialize history stack for loaded data
+      setHistoryStack([{ essay: loadedEssay, annotations: loadedAnnotations }]);
+      setHistoryPointer(0);
+      setHistoryLog([]);
     }
   }, [initialData]);
 
@@ -271,6 +330,7 @@ Strict output: only two top-level fields: "annotations" (array) and "summary" (o
         model: selectedModel,
         contents: [{ role: 'user', parts }],
         config: {
+          thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
           responseMimeType: 'application/json',
           responseSchema: {
             type: Type.OBJECT,
@@ -410,7 +470,7 @@ Strict output: only two top-level fields: "annotations" (array) and "summary" (o
         const uploadedEssayUrls = await Promise.all(essayImages.map(img => uploadToImageKit(img.file)));
         
         onSaveHistory('essay-feedback', lang === 'zh' ? '作文讲评' : 'Essay Feedback', {
-          essay,
+          essay: finalEssay,
           annotations: annotationsWithIds,
           summary: parsed.summary,
           refImageUrls: uploadedRefUrls.filter(url => url !== null),
@@ -527,17 +587,26 @@ Strict output: only two top-level fields: "annotations" (array) and "summary" (o
           return (
             <div 
               key={paraIndex} 
-              className={`relative group/para transition-all duration-300 ${editingParaIndex === paraIndex ? 'bg-white/[0.02] border border-white/10 rounded-2xl p-6 -mx-6 my-4 shadow-2xl shadow-black/50' : ''}`}
+              className={`paragraph-container relative group/para transition-all duration-300 ${editingParaIndex === paraIndex ? 'bg-white/[0.02] border border-white/10 rounded-2xl p-6 -mx-6 my-4 shadow-2xl shadow-black/50' : ''}`}
               onMouseEnter={() => setHoveredParaIndex(paraIndex)}
               onMouseLeave={() => setHoveredParaIndex(null)}
+              onClick={(e) => {
+                if (editingParaIndex !== paraIndex) {
+                  setActiveParaIndex(paraIndex);
+                }
+              }}
             >
               <div className={editingParaIndex === paraIndex ? '' : 'pr-12'}>
                 {editingParaIndex === paraIndex ? (
                   <textarea 
                     ref={textareaRef}
                     value={tempParaText}
-                    onChange={(e) => setTempParaText(e.target.value)}
-                    className="w-full min-h-[1.5em] bg-transparent border-none text-white text-base leading-relaxed focus:ring-0 outline-none resize-none transition-all font-sans p-0 m-0 overflow-hidden"
+                    onChange={(e) => {
+                      setTempParaText(e.target.value);
+                      e.target.style.height = 'auto';
+                      e.target.style.height = e.target.scrollHeight + 'px';
+                    }}
+                    className="w-full min-h-[1.5em] bg-transparent border-none text-white text-base leading-relaxed focus:ring-0 outline-none resize-none font-sans p-0 m-0 overflow-hidden"
                     autoFocus
                   />
                 ) : (
@@ -547,14 +616,20 @@ Strict output: only two top-level fields: "annotations" (array) and "summary" (o
               
               {editingParaIndex !== paraIndex && (
                 <button 
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     setEditingParaIndex(paraIndex);
                     setTempParaText(paraText);
                     setParaAiInput('');
+                    setActiveParaIndex(null);
                   }}
-                  className={`absolute right-0 top-1/2 -translate-y-1/2 p-2 bg-white/5 hover:bg-white/10 rounded-lg transition-all duration-200 opacity-0 group-hover/para:opacity-100 ${hoveredParaIndex === paraIndex ? 'translate-x-0' : 'translate-x-2'}`}
+                  className={`absolute right-0 top-1/2 -translate-y-1/2 p-2 bg-white/5 hover:bg-white/10 rounded-lg transition-all duration-200 ${
+                    (hoveredParaIndex === paraIndex || activeParaIndex === paraIndex) 
+                      ? 'opacity-100 translate-x-0' 
+                      : 'opacity-0 translate-x-2'
+                  }`}
                 >
-                  <ChevronRight className="w-5 h-5 text-white/40 group-hover/para:text-white" />
+                  <ChevronRight className="w-5 h-5 text-white/40 hover:text-white" />
                 </button>
               )}
 
@@ -569,7 +644,18 @@ Strict output: only two top-level fields: "annotations" (array) and "summary" (o
                   >
                     <div className="my-6 bg-[#2A2A2A] border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col gap-5">
                       <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-bold text-white/60 uppercase tracking-widest">{lang === 'zh' ? 'AI 优化指导' : 'AI Optimization'}</h3>
+                        <div className="flex items-center gap-3">
+                          <h3 className="text-sm font-bold text-white/60 uppercase tracking-widest">{lang === 'zh' ? 'AI 优化指导' : 'AI Optimization'}</h3>
+                          <select 
+                            value={paraAiModel}
+                            onChange={e => setParaAiModel(e.target.value)}
+                            className="bg-black/40 border border-white/10 text-zinc-300 text-xs rounded-lg px-2 py-1 outline-none focus:ring-1 focus:ring-white"
+                          >
+                            <option value="gemini-3-flash-preview">Gemini 3.0 Flash</option>
+                            <option value="gemini-3.1-flash-preview">Gemini 3.1 Flash</option>
+                            <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
+                          </select>
+                        </div>
                         <button onClick={() => setEditingParaIndex(null)} className="p-1 hover:bg-white/10 rounded-full transition-colors text-white/50 hover:text-white">
                           <X className="w-5 h-5" />
                         </button>
@@ -771,12 +857,15 @@ Strict output: only two top-level fields: "annotations" (array) and "summary" (o
     setIsParaAiLoading(true);
     try {
       const response = await ai.models.generateContent({
-        model: selectedModel,
+        model: paraAiModel,
         contents: `你是一个专业的写作导师。请根据以下指令修改给定的段落。
 指令：${paraAiInput}
 原始段落：${tempParaText}
 
 请直接返回修改后的段落内容，不要包含任何解释或多余的文字。`,
+        config: {
+          thinkingConfig: { thinkingLevel: paraAiModel.includes('flash') ? ThinkingLevel.LOW : ThinkingLevel.HIGH }
+        }
       });
       
       const newParaText = response.text?.trim();
@@ -796,10 +885,101 @@ Strict output: only two top-level fields: "annotations" (array) and "summary" (o
     const item = historyLog.find(l => l.id === logId);
     if (!item) return;
     
-    // Restore the paragraph to its old state
-    updateEssayWithParagraph(item.paraIndex, item.oldParaText, lang === 'zh' ? `恢复: ${item.label}` : `Revert: ${item.label}`);
-    // Optional: remove from log? User might want to keep it. 
-    // Let's keep it but maybe mark it. For now just add a new entry.
+    if (item.paraIndex === -1) {
+      // Global revert
+      setEssay(item.oldParaText);
+      setAnnotations([]); // We don't have the old annotations stored in the log easily, but we can rely on undo stack
+      pushToHistory(item.oldParaText, []);
+      setHistoryLog(prev => [{
+        id: 'log_' + Date.now(),
+        paraIndex: -1,
+        oldParaText: item.newParaText,
+        newParaText: item.oldParaText,
+        label: lang === 'zh' ? `恢复: ${item.label}` : `Revert: ${item.label}`,
+        timestamp: Date.now(),
+        type: 'paragraph'
+      }, ...prev]);
+    } else {
+      // Restore the paragraph to its old state
+      updateEssayWithParagraph(item.paraIndex, item.oldParaText, lang === 'zh' ? `恢复: ${item.label}` : `Revert: ${item.label}`);
+    }
+  };
+
+  const handleGlobalChat = async () => {
+    if (!globalChatInput.trim()) return;
+    
+    const userMessage = globalChatInput.trim();
+    setGlobalChatHistory(prev => [...prev, { role: 'user', text: userMessage }]);
+    setGlobalChatInput('');
+    setIsGlobalChatLoading(true);
+
+    try {
+      const historyContext = globalChatHistory.map(msg => `${msg.role === 'user' ? 'User' : 'AI'}: ${msg.text}`).join('\n\n');
+      
+      const prompt = `你是一个专业的写作导师。当前学生的作文如下：
+${essay}
+
+当前的批改总结：
+${summary?.overall_comment || '无'}
+
+历史对话：
+${historyContext}
+
+用户的新要求/问题：
+${userMessage}
+
+请根据用户的要求回答问题或修改作文。
+请返回 JSON 格式：
+{
+  "response_text": "你的回答或解释",
+  "modified_essay": "如果用户要求修改整篇作文，请在这里输出修改后的完整作文。如果没有要求修改，请返回空字符串。"
+}`;
+
+      const response = await ai.models.generateContent({
+        model: globalChatModel,
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              response_text: { type: Type.STRING },
+              modified_essay: { type: Type.STRING, description: "如果用户要求修改整篇作文，请在这里输出修改后的完整作文。如果没有要求修改，请返回空字符串。" }
+            },
+            required: ['response_text', 'modified_essay']
+          },
+          thinkingConfig: { thinkingLevel: globalChatModel.includes('flash') ? ThinkingLevel.LOW : ThinkingLevel.HIGH }
+        }
+      });
+
+      const resultText = response.text || '{}';
+      const parsed = JSON.parse(resultText);
+
+      setGlobalChatHistory(prev => [...prev, { role: 'model', text: parsed.response_text }]);
+
+      if (parsed.modified_essay && parsed.modified_essay.trim() !== '') {
+        const newEssay = parsed.modified_essay;
+        const oldEssay = essay;
+        setEssay(newEssay);
+        setAnnotations([]);
+        pushToHistory(newEssay, []);
+        setHistoryLog(prev => [{
+          id: 'log_' + Date.now(),
+          paraIndex: -1,
+          oldParaText: oldEssay,
+          newParaText: newEssay,
+          label: lang === 'zh' ? '全局 AI 修改' : 'Global AI Edit',
+          timestamp: Date.now(),
+          type: 'paragraph'
+        }, ...prev]);
+      }
+
+    } catch (err) {
+      console.error('Global Chat Error:', err);
+      setGlobalChatHistory(prev => [...prev, { role: 'model', text: lang === 'zh' ? '抱歉，处理您的请求时出错。' : 'Sorry, an error occurred while processing your request.' }]);
+    } finally {
+      setIsGlobalChatLoading(false);
+    }
   };
 
   const copyMarkdown = () => {
@@ -933,7 +1113,7 @@ Strict output: only two top-level fields: "annotations" (array) and "summary" (o
   return (
     <div className="flex flex-col h-full bg-[#141414] text-white overflow-hidden relative">
       {viewMode === 'input' ? (
-        <div className="flex-1 overflow-y-auto p-6 max-w-4xl mx-auto w-full">
+        <div className="flex-1 overflow-y-auto p-6 pt-10 max-w-4xl mx-auto w-full">
           <div className="mb-8 text-center">
             <h2 className="text-3xl font-bold mb-2">{lang === 'zh' ? '作文讲评 (北京高考)' : 'Essay Feedback'}</h2>
             <p className="text-white/60">{lang === 'zh' ? '支持文本与图片上传，AI 自动识别问题并提供修改建议' : 'Upload text or images, AI automatically identifies issues and provides suggestions'}</p>
@@ -1081,7 +1261,7 @@ Strict output: only two top-level fields: "annotations" (array) and "summary" (o
                   )}
                   <label className="cursor-pointer px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-full text-[10px] font-medium transition-colors flex items-center gap-1 border border-white/10">
                     <Upload className="w-3 h-3" />
-                    {lang === 'zh' ? '上传图片' : 'Upload'}
+                    {lang === 'zh' ? '上传参考图片' : 'Upload Ref'}
                     <input type="file" accept="image/*" multiple className="hidden" onChange={e => handleImageUpload(e, 'ref')} />
                   </label>
                 </div>
@@ -1124,37 +1304,35 @@ Strict output: only two top-level fields: "annotations" (array) and "summary" (o
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Essay Images Upload */}
-              <div className="bg-white/5 border border-white/10 rounded-xl p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <label className="text-sm font-medium text-white/70 flex items-center gap-2">
-                    <ImageIcon className="w-4 h-4" />
-                    {lang === 'zh' ? '作文图片 (可选)' : 'Essay Images (Optional)'}
-                  </label>
-                  <label className="cursor-pointer px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-medium transition-colors flex items-center gap-1">
-                    <Upload className="w-3 h-3" />
-                    {lang === 'zh' ? '上传图片' : 'Upload'}
-                    <input type="file" accept="image/*" multiple className="hidden" onChange={e => handleImageUpload(e, 'essay')} />
-                  </label>
-                </div>
-                {essayImages.length > 0 ? (
-                  <div className="flex gap-2 overflow-x-auto pb-2">
-                    {essayImages.map((img, idx) => (
-                      <div key={idx} className="relative w-20 h-20 shrink-0 rounded-lg overflow-hidden border border-white/20 group">
-                        <img src={img.url} alt="essay" className="w-full h-full object-cover" />
-                        <button onClick={() => removeImage(idx, 'essay')} className="absolute top-1 right-1 p-1 bg-black/60 rounded text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-xs text-white/40 text-center py-4 border border-dashed border-white/10 rounded-lg">
-                    {lang === 'zh' ? '暂无图片，可上传手写作文' : 'No images, upload handwritten essay'}
-                  </div>
-                )}
+            {/* Essay Images Upload */}
+            <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <label className="text-sm font-medium text-white/70 flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4" />
+                  {lang === 'zh' ? '作文图片 (可选)' : 'Essay Images (Optional)'}
+                </label>
+                <label className="cursor-pointer px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-full text-[10px] font-medium transition-colors flex items-center gap-1 border border-white/10">
+                  <Upload className="w-3 h-3" />
+                  {lang === 'zh' ? '上传作文图片' : 'Upload Essay'}
+                  <input type="file" accept="image/*" multiple className="hidden" onChange={e => handleImageUpload(e, 'essay')} />
+                </label>
               </div>
+              {essayImages.length > 0 ? (
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  {essayImages.map((img, idx) => (
+                    <div key={idx} className="relative w-20 h-20 shrink-0 rounded-lg overflow-hidden border border-white/20 group">
+                      <img src={img.url} alt="essay" className="w-full h-full object-cover" />
+                      <button onClick={() => removeImage(idx, 'essay')} className="absolute top-1 right-1 p-1 bg-black/60 rounded text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-white/40 text-center py-4 border border-dashed border-white/10 rounded-lg">
+                  {lang === 'zh' ? '暂无图片，可上传手写作文' : 'No images, upload handwritten essay'}
+                </div>
+              )}
             </div>
 
             <div>
@@ -1333,6 +1511,70 @@ Strict output: only two top-level fields: "annotations" (array) and "summary" (o
 
                 <div className="bg-[#1A1A1A] border border-white/10 rounded-2xl p-6 md:p-8 shadow-2xl text-lg leading-relaxed font-sans whitespace-pre-wrap break-words relative">
                   {renderAnnotatedText()}
+                </div>
+
+                {/* Global Chat Box */}
+                <div className="mt-8 bg-[#1A1A1A] border border-white/10 rounded-2xl overflow-hidden shadow-2xl flex flex-col">
+                  <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/5">
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-emerald-400" />
+                      {lang === 'zh' ? '全局修改与问答' : 'Global Chat & Edit'}
+                    </h3>
+                    <select 
+                      value={globalChatModel}
+                      onChange={e => setGlobalChatModel(e.target.value)}
+                      className="bg-black/40 border border-white/10 text-zinc-300 text-xs rounded-lg px-2 py-1 outline-none focus:ring-1 focus:ring-white"
+                    >
+                      <option value="gemini-3-flash-preview">Gemini 3.0 Flash</option>
+                      <option value="gemini-3.1-flash-preview">Gemini 3.1 Flash</option>
+                      <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
+                    </select>
+                  </div>
+                  
+                  <div className="p-4 max-h-96 overflow-y-auto flex flex-col gap-4 custom-scrollbar" ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}>
+                    {globalChatHistory.length === 0 && (
+                      <div className="text-center text-white/40 text-sm py-4">
+                        {lang === 'zh' ? '在这里输入你的问题，或者让 AI 帮你重写整篇作文...' : 'Ask questions here, or ask AI to rewrite the whole essay...'}
+                      </div>
+                    )}
+                    {globalChatHistory.map((msg, i) => (
+                      <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap ${msg.role === 'user' ? 'bg-emerald-500/20 text-emerald-100 rounded-tr-sm' : 'bg-white/10 text-white/90 rounded-tl-sm'}`}>
+                          {msg.text}
+                        </div>
+                      </div>
+                    ))}
+                    {isGlobalChatLoading && (
+                      <div className="flex justify-start">
+                        <div className="max-w-[80%] rounded-2xl px-4 py-3 text-sm bg-white/10 text-white/90 rounded-tl-sm flex items-center gap-2">
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          {lang === 'zh' ? '思考中...' : 'Thinking...'}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-4 bg-white/5 border-t border-white/10 flex gap-2">
+                    <textarea
+                      value={globalChatInput}
+                      onChange={e => setGlobalChatInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleGlobalChat();
+                        }
+                      }}
+                      placeholder={lang === 'zh' ? '输入你的要求 (按 Enter 发送)...' : 'Enter your request (Press Enter to send)...'}
+                      className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50 resize-none h-12 custom-scrollbar"
+                    />
+                    <button 
+                      onClick={handleGlobalChat}
+                      disabled={isGlobalChatLoading || !globalChatInput.trim()}
+                      className="px-4 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center"
+                    >
+                      <Sparkles className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
