@@ -58,28 +58,28 @@ service cloud.firestore {
 
     // Rules
     match /textbooks/{document} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow create: if isAdmin() && isValidTextbook();
       allow update: if isAdmin() && isValidTextbook();
       allow delete: if isAdmin();
     }
 
     match /textbook_groups/{document} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow create: if isAdmin() && isValidGroup();
       allow update: if isAdmin() && isValidGroup();
       allow delete: if isAdmin();
     }
 
     match /materials/{document} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow create: if isAdmin() && isValidTextbook();
       allow update: if isAdmin() && isValidTextbook();
       allow delete: if isAdmin();
     }
 
     match /material_groups/{document} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow create: if isAdmin() && isValidGroup();
       allow update: if isAdmin() && isValidGroup();
       allow delete: if isAdmin();

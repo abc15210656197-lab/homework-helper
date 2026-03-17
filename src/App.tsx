@@ -1978,13 +1978,15 @@ CRITICAL INSTRUCTIONS:
                 )}
               </div>
               
-              <button 
-                onClick={() => setShowTextbookManager(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-black/40 hover:bg-white/10 border border-white/10 hover:border-white/30 rounded-full text-sm text-zinc-300 hover:text-white transition-all shadow-lg active:scale-95"
-              >
-                <Book className="w-4 h-4" />
-                {t.manageTextbooks}
-              </button>
+              {isAdmin && (
+                <button 
+                  onClick={() => setShowTextbookManager(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-black/40 hover:bg-white/10 border border-white/10 hover:border-white/30 rounded-full text-sm text-zinc-300 hover:text-white transition-all shadow-lg active:scale-95"
+                >
+                  <Book className="w-4 h-4" />
+                  {t.manageTextbooks}
+                </button>
+              )}
             </div>
           )}
 
@@ -2320,6 +2322,7 @@ CRITICAL INSTRUCTIONS:
                   onManageMaterials={() => setShowMaterialManager(true)}
                   onSaveHistory={saveHistory}
                   initialData={materialAssistantData}
+                  isAdmin={isAdmin}
                 />
               </div>
             </motion.div>
@@ -2341,6 +2344,7 @@ CRITICAL INSTRUCTIONS:
                   groups={materialGroups}
                   onManageMaterials={() => setShowMaterialManager(true)}
                   selectedModel={selectedModel}
+                  isAdmin={isAdmin}
                 />
               </div>
             </motion.div>

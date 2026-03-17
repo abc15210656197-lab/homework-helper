@@ -12,13 +12,14 @@ import { Textbook, TextbookGroup } from './TextbookManager';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-export function MaterialAssistant({ lang, materials, groups, onManageMaterials, onSaveHistory, initialData }: { 
+export function MaterialAssistant({ lang, materials, groups, onManageMaterials, onSaveHistory, initialData, isAdmin = false }: { 
   lang: 'zh' | 'en', 
   materials: Textbook[],
   groups: TextbookGroup[],
   onManageMaterials: () => void,
   onSaveHistory?: (module: string, summary: string, content: any, file?: File | { base64: string, mimeType: string }) => void,
-  initialData?: any
+  initialData?: any,
+  isAdmin?: boolean
 }) {
   const [topic, setTopic] = useState('');
   const [image, setImage] = useState<{ base64: string, mimeType: string } | null>(null);
@@ -461,13 +462,15 @@ Requirements:
                   </AnimatePresence>
                 </div>
               )}
-              <button 
-                onClick={onManageMaterials}
-                className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl text-xs text-zinc-300 hover:text-white transition-all active:scale-95"
-              >
-                <Book className="w-3.5 h-3.5" />
-                {lang === 'zh' ? '管理素材' : 'Manage Materials'}
-              </button>
+              {isAdmin && (
+                <button 
+                  onClick={onManageMaterials}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl text-xs text-zinc-300 hover:text-white transition-all active:scale-95"
+                >
+                  <Book className="w-3.5 h-3.5" />
+                  {lang === 'zh' ? '管理素材' : 'Manage Materials'}
+                </button>
+              )}
             </div>
           </div>
           {materials.length === 0 ? (

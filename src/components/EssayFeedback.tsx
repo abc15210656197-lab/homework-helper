@@ -35,14 +35,15 @@ interface ImageFile {
   mimeType: string;
 }
 
-export function EssayFeedback({ lang, onSaveHistory, initialData, materials = [], groups = [], onManageMaterials, selectedModel = 'gemini-3-flash-preview' }: { 
+export function EssayFeedback({ lang, onSaveHistory, initialData, materials = [], groups = [], onManageMaterials, selectedModel = 'gemini-3-flash-preview', isAdmin = false }: { 
   lang: 'zh' | 'en',
   onSaveHistory?: (module: string, summary: string, content: any) => void,
   initialData?: any,
   materials?: Textbook[],
   groups?: TextbookGroup[],
   onManageMaterials?: () => void,
-  selectedModel?: string
+  selectedModel?: string,
+  isAdmin?: boolean
 }) {
   const [essay, setEssay] = useState('');
   const [essayImages, setEssayImages] = useState<ImageFile[]>([]);
@@ -642,7 +643,7 @@ Strict output: only two top-level fields: "annotations" (array) and "summary" (o
                     exit={{ opacity: 0, height: 0 }}
                     className="overflow-hidden w-full"
                   >
-                    <div className="my-6 bg-[#2A2A2A] border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col gap-5">
+                    <div className="my-6 bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col gap-5">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <h3 className="text-sm font-bold text-white/60 uppercase tracking-widest">{lang === 'zh' ? 'AI 优化指导' : 'AI Optimization'}</h3>
@@ -754,7 +755,7 @@ Strict output: only two top-level fields: "annotations" (array) and "summary" (o
             <motion.div 
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-[#2A2A2A] border border-white/10 rounded-2xl p-5 shadow-xl text-left text-base font-normal cursor-default flex flex-col gap-3 mx-auto max-w-2xl"
+              className="bg-black/60 backdrop-blur-xl border border-white/10 rounded-2xl p-5 shadow-xl text-left text-base font-normal cursor-default flex flex-col gap-3 mx-auto max-w-2xl"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between">
@@ -1111,7 +1112,7 @@ ${userMessage}
   const activeAnnotation = annotations.find(a => a.id === activeAnnotationId);
 
   return (
-    <div className="flex flex-col h-full bg-[#141414] text-white overflow-hidden relative">
+    <div className="flex flex-col h-full text-white overflow-hidden relative">
       {viewMode === 'input' ? (
         <div className="flex-1 overflow-y-auto p-6 pt-10 max-w-4xl mx-auto w-full">
           <div className="mb-8 text-center">
@@ -1251,7 +1252,7 @@ ${userMessage}
                       </AnimatePresence>
                     </div>
                   )}
-                  {onManageMaterials && (
+                  {onManageMaterials && isAdmin && (
                     <button 
                       onClick={onManageMaterials}
                       className="bg-white/10 hover:bg-white/20 text-white text-[10px] rounded-full px-3 py-1.5 transition-colors"
@@ -1424,7 +1425,7 @@ ${userMessage}
                       exit={{ height: 0, opacity: 0 }}
                       className="overflow-hidden mb-6"
                     >
-                      <div className="bg-[#222] border border-emerald-500/30 rounded-2xl p-6 shadow-xl">
+                      <div className="bg-emerald-500/10 backdrop-blur-md border border-emerald-500/30 rounded-2xl p-6 shadow-xl">
                         <div className="flex items-center justify-between mb-4">
                           <div className="flex items-center gap-2">
                             <Clock className="w-4 h-4 text-emerald-400" />
@@ -1509,12 +1510,12 @@ ${userMessage}
                   </div>
                 )}
 
-                <div className="bg-[#1A1A1A] border border-white/10 rounded-2xl p-6 md:p-8 shadow-2xl text-lg leading-relaxed font-sans whitespace-pre-wrap break-words relative">
+                <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-6 md:p-8 shadow-2xl text-lg leading-relaxed font-sans whitespace-pre-wrap break-words relative">
                   {renderAnnotatedText()}
                 </div>
 
                 {/* Global Chat Box */}
-                <div className="mt-8 bg-[#1A1A1A] border border-white/10 rounded-2xl overflow-hidden shadow-2xl flex flex-col">
+                <div className="mt-8 bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl overflow-hidden shadow-2xl flex flex-col">
                   <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/5">
                     <h3 className="text-sm font-bold text-white flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-emerald-400" />
