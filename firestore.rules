@@ -1,22 +1,18 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
     // ===============================================================
     // Assumed Data Model
     // ===============================================================
-    // Collection: textbooks, materials
-    // Fields:
-    //   - name: string (required)
-    //   - url: string (required)
-    //   - fileId: string (optional)
-    //   - createdAt: timestamp (required)
-    //   - groupId: string (optional)
     //
-    // Collection: textbook_groups, material_groups
+    // Collection: settings
+    // Document ID: zhang_jingyang
     // Fields:
-    //   - name: string (required)
-    //   - createdAt: timestamp (required)
+    //   - avatarUrls: list of strings (required) - List of avatar URLs
+    //   - currentAvatarIndex: number (required) - Index of current avatar
+    //   - updatedAt: timestamp (optional) - Last update time
+    //   - updatedBy: string (optional) - User UID who updated
+    //
     // ===============================================================
 
     // Helper Functions
@@ -25,64 +21,27 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isAuthenticated() && request.auth.token.email == 'abc15210656197@gmail.com';
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "abc15210656197@gmail.com" && request.auth.token.email_verified == true));
     }
 
-    function hasRequiredFields(fields) {
-      return request.resource.data.keys().hasAll(fields);
+    function isValidSettings(data) {
+      return data.keys().hasAll(['avatarUrls', 'currentAvatarIndex']) &&
+             data.avatarUrls is list &&
+             data.currentAvatarIndex is number &&
+             data.currentAvatarIndex >= 0 &&
+             (data.avatarUrls.size() == 0 || data.currentAvatarIndex < data.avatarUrls.size());
     }
 
-    function isValidString(field, min, max) {
-      return request.resource.data[field] is string &&
-             request.resource.data[field].size() >= min &&
-             request.resource.data[field].size() <= max;
-    }
-    
-    function isValidTimestamp(field) {
-       return request.resource.data[field] is timestamp;
+    match /settings/zhang_jingyang {
+      allow read: if true; // Everyone can see the avatars
+      allow write: if isAdmin() && isValidSettings(request.resource.data);
     }
 
-    // Validators
-    function isValidTextbook() {
-      return hasRequiredFields(['name', 'url', 'createdAt']) &&
-             isValidString('name', 1, 100) &&
-             isValidString('url', 1, 500) &&
-             isValidTimestamp('createdAt');
-    }
-
-    function isValidGroup() {
-      return hasRequiredFields(['name', 'createdAt']) &&
-             isValidString('name', 1, 50) &&
-             isValidTimestamp('createdAt');
-    }
-
-    // Rules
-    match /textbooks/{document} {
-      allow read: if true;
-      allow create: if isAdmin() && isValidTextbook();
-      allow update: if isAdmin() && isValidTextbook();
-      allow delete: if isAdmin();
-    }
-
-    match /textbook_groups/{document} {
-      allow read: if true;
-      allow create: if isAdmin() && isValidGroup();
-      allow update: if isAdmin() && isValidGroup();
-      allow delete: if isAdmin();
-    }
-
-    match /materials/{document} {
-      allow read: if true;
-      allow create: if isAdmin() && isValidTextbook();
-      allow update: if isAdmin() && isValidTextbook();
-      allow delete: if isAdmin();
-    }
-
-    match /material_groups/{document} {
-      allow read: if true;
-      allow create: if isAdmin() && isValidGroup();
-      allow update: if isAdmin() && isValidGroup();
-      allow delete: if isAdmin();
+    match /users/{userId} {
+      allow read: if request.auth.uid == userId || isAdmin();
+      allow write: if request.auth.uid == userId || isAdmin();
     }
   }
 }

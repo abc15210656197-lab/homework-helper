@@ -1,45 +1,38 @@
 {
   "entities": {
-    "Textbook": {
-      "title": "Textbook",
-      "description": "A textbook or material file",
+    "ZhangJingyangSettings": {
+      "title": "Zhang Jingyang Mode Settings",
+      "description": "Global settings for Zhang Jingyang mode, including avatar URLs and current avatar index.",
       "type": "object",
       "properties": {
-        "name": { "type": "string" },
-        "url": { "type": "string" },
-        "fileId": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "groupId": { "type": "string" }
+        "avatarUrls": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of avatar image URLs."
+        },
+        "currentAvatarIndex": {
+          "type": "integer",
+          "description": "Index of the currently selected avatar."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update timestamp."
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "UID of the user who last updated the settings."
+        }
       },
-      "required": ["name", "url", "createdAt"]
-    },
-    "TextbookGroup": {
-      "title": "Textbook Group",
-      "description": "A group for textbooks",
-      "type": "object",
-      "properties": {
-        "name": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["name", "createdAt"]
+      "required": ["avatarUrls", "currentAvatarIndex"]
     }
   },
   "firestore": {
-    "textbooks": {
-      "schema": "Textbook",
-      "description": "Collection of textbooks"
-    },
-    "textbook_groups": {
-      "schema": "TextbookGroup",
-      "description": "Collection of textbook groups"
-    },
-    "materials": {
-      "schema": "Textbook",
-      "description": "Collection of materials"
-    },
-    "material_groups": {
-      "schema": "TextbookGroup",
-      "description": "Collection of material groups"
+    "/settings/zhang_jingyang": {
+      "schema": "ZhangJingyangSettings",
+      "description": "Global settings document for Zhang Jingyang mode."
     }
   }
 }

@@ -26,6 +26,7 @@ import 'github-markdown-css/github-markdown-dark.css';
 
 import { MaterialAssistant } from './components/MaterialAssistant';
 import { EssayFeedback } from './components/EssayFeedback';
+import { ZhangJingyangMode } from './components/ZhangJingyangMode';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -970,7 +971,7 @@ function BackgroundLines() {
 import { HistoryDrawer } from './components/HistoryDrawer';
 
 export default function App() {
-  const [appMode, setAppMode] = useState<'extractor' | 'audio-tutor' | 'reading-coach' | 'grapher' | 'material-assistant' | 'essay-feedback'>('extractor');
+  const [appMode, setAppMode] = useState<'extractor' | 'audio-tutor' | 'reading-coach' | 'grapher' | 'material-assistant' | 'essay-feedback' | 'zhang-jingyang'>('extractor');
   const [materialAssistantData, setMaterialAssistantData] = useState<any>(null);
   const [essayFeedbackData, setEssayFeedbackData] = useState<any>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -1741,7 +1742,7 @@ CRITICAL INSTRUCTIONS:
 
         <main className={`space-y-6 flex-1 flex flex-col`}>
           <div className="flex justify-center mb-4 md:mb-8 shrink-0">
-            <div className="grid grid-cols-3 sm:flex sm:flex-nowrap gap-3 md:gap-8 p-3 md:p-4 rounded-3xl border border-white/5 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] bg-black/20 liquid-panel w-full sm:w-auto">
+            <div className="grid grid-cols-4 sm:flex sm:flex-wrap justify-center gap-3 md:gap-8 p-3 md:p-4 rounded-3xl border border-white/5 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] bg-black/20 liquid-panel w-full sm:w-auto max-w-4xl mx-auto">
               <button
                 onClick={() => setAppMode('extractor')}
                 className="group flex flex-col items-center gap-2 md:gap-3 transition-all duration-300 active:scale-95 relative"
@@ -1837,11 +1838,27 @@ CRITICAL INSTRUCTIONS:
                   {language === 'zh' ? '作文讲评' : 'Essay Feedback'}
                 </span>
               </button>
+
+              <button
+                onClick={() => setAppMode('zhang-jingyang')}
+                className="group flex flex-col items-center gap-2 md:gap-3 transition-all duration-300 active:scale-95 relative"
+              >
+                <div className={`w-12 h-12 md:w-16 md:h-16 rounded-full flex items-center justify-center transition-all duration-500 border border-white/10 ${
+                  appMode === 'zhang-jingyang'
+                    ? 'bg-white text-black shadow-[0_0_50px_rgba(255,255,255,0.7)] scale-105 z-10'
+                    : 'bg-black/40 text-white hover:bg-black/60 z-0'
+                }`}>
+                  <MessageCircle className="w-5 h-5 md:w-7 md:h-7" />
+                </div>
+                <span className={`text-[10px] md:text-xs font-medium transition-colors text-center ${appMode === 'zhang-jingyang' ? 'text-white' : 'text-zinc-400'}`}>
+                  {language === 'zh' ? '张景洋模式' : 'Zhang Jingyang'}
+                </span>
+              </button>
             </div>
           </div>
 
           {/* Model Selection */}
-          {appMode !== 'reading-coach' && appMode !== 'grapher' && (
+          {appMode !== 'reading-coach' && appMode !== 'grapher' && appMode !== 'zhang-jingyang' && (
             <div className="grid grid-cols-2 md:flex md:flex-nowrap gap-3 md:gap-4 justify-center py-2">
               {MODELS.map((m) => (
                 <button
@@ -2366,6 +2383,19 @@ CRITICAL INSTRUCTIONS:
                 textbooks={textbooks}
                 onSaveHistory={saveHistory}
               />
+            </motion.div>
+          </div>
+
+          <div className={appMode === 'zhang-jingyang' ? 'block flex-1 flex flex-col' : 'hidden'}>
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="flex-1 flex flex-col"
+            >
+              <div className="flex-1 min-h-0 bg-zinc-900/50 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden shadow-2xl liquid-panel">
+                <ZhangJingyangMode lang={language} />
+              </div>
             </motion.div>
           </div>
 

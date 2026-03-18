@@ -416,7 +416,7 @@ export function TextbookManager({ onClose, lang, type = 'textbook', isAdmin = fa
               </div>
             )}
 
-            {isAdmin && (uploadMode === 'file' ? (
+            {uploadMode === 'file' ? (
               <label className="flex items-center justify-center w-full p-8 border-2 border-dashed border-white/20 rounded-xl hover:border-white/50 hover:bg-white/5 transition-all cursor-pointer group liquid-panel">
                 <div className="flex flex-col items-center gap-2 text-zinc-400 group-hover:text-white">
                   {uploading ? (
@@ -473,7 +473,7 @@ export function TextbookManager({ onClose, lang, type = 'textbook', isAdmin = fa
                   {lang === 'zh' ? '添加链接' : 'Add URL'}
                 </button>
               </div>
-            ))}
+            )}
           </div>
 
           <div className="space-y-3">

@@ -1,19 +1,9 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore, initializeFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
 import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
+// Initialize Firebase SDK
 const app = initializeApp(firebaseConfig);
-
-// Use initializeFirestore with experimentalForceLongPolling to improve proxy compatibility
-// Use the databaseId from the config file
-const db = initializeFirestore(app, { experimentalForceLongPolling: true }, firebaseConfig.firestoreDatabaseId);
-const auth = getAuth(app);
-let storage = null;
-
-if (firebaseConfig.storageBucket) {
-  storage = getStorage(app);
-}
-
-export { db, storage, auth };
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const auth = getAuth();
