@@ -1420,6 +1420,20 @@ export default function App() {
       querySnapshot.forEach((doc) => {
         books.push({ id: doc.id, ...doc.data() } as Textbook);
       });
+      
+      // Merge with local storage if Firestore is empty
+      if (books.length === 0) {
+        const localBooks = localStorage.getItem('materials');
+        if (localBooks) {
+          try {
+            const parsed = JSON.parse(localBooks);
+            books.push(...parsed);
+          } catch (e) {
+            // ignore
+          }
+        }
+      }
+
       const sortedBooks = books.sort((a, b) => {
         const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : (a.createdAt || 0));
         const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : (b.createdAt || 0));
@@ -1483,6 +1497,20 @@ export default function App() {
       querySnapshot.forEach((doc) => {
         books.push({ id: doc.id, ...doc.data() } as Textbook);
       });
+
+      // Merge with local storage if Firestore is empty
+      if (books.length === 0) {
+        const localBooks = localStorage.getItem('textbooks');
+        if (localBooks) {
+          try {
+            const parsed = JSON.parse(localBooks);
+            books.push(...parsed);
+          } catch (e) {
+            // ignore
+          }
+        }
+      }
+
       const sortedBooks = books.sort((a, b) => {
         const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : (a.createdAt || 0));
         const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : (b.createdAt || 0));

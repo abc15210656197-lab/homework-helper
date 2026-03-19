@@ -58,6 +58,20 @@ export function TextbookManager({ onClose, lang, type = 'textbook', isAdmin = fa
       querySnapshot.forEach((doc) => {
         loadedGroups.push({ id: doc.id, ...doc.data() } as TextbookGroup);
       });
+
+      // Merge with local storage if Firestore is empty
+      if (loadedGroups.length === 0) {
+        const localGroups = localStorage.getItem(groupsStorageKey);
+        if (localGroups) {
+          try {
+            const parsed = JSON.parse(localGroups);
+            loadedGroups.push(...parsed);
+          } catch (e) {
+            // ignore
+          }
+        }
+      }
+
       setGroups(loadedGroups.sort((a, b) => {
         const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : (a.createdAt || 0));
         const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : (b.createdAt || 0));
@@ -83,6 +97,20 @@ export function TextbookManager({ onClose, lang, type = 'textbook', isAdmin = fa
       querySnapshot.forEach((doc) => {
         books.push({ id: doc.id, ...doc.data() } as Textbook);
       });
+
+      // Merge with local storage if Firestore is empty
+      if (books.length === 0) {
+        const localBooks = localStorage.getItem(storageKey);
+        if (localBooks) {
+          try {
+            const parsed = JSON.parse(localBooks);
+            books.push(...parsed);
+          } catch (e) {
+            // ignore
+          }
+        }
+      }
+
       setTextbooks(books.sort((a, b) => {
         const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : (a.createdAt || 0));
         const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : (b.createdAt || 0));

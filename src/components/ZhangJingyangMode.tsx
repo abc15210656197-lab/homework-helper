@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
-import { Mic, MicOff, Send, Play, Square, Loader2, Volume2, PhoneOff, Phone, RefreshCw, Settings, X, Trash2, Check, User, LogIn, LogOut, AlertCircle } from 'lucide-react';
+import { Mic, MicOff, Send, Play, Square, Loader2, Volume2, PhoneOff, Phone, RefreshCw, Settings, X, Trash2, Check, User, LogIn, LogOut, AlertCircle, HelpCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import { db, auth } from '../firebase';
 import { doc, onSnapshot, setDoc, getDocFromServer, serverTimestamp } from 'firebase/firestore';
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
+import { TRANSLATIONS } from '../constants';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -101,13 +102,28 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 // 默认头像列表
 const DEFAULT_AVATARS: string[] = [];
 
-const SYSTEM_INSTRUCTION = `你现在扮演张景洋，一个说话软绵绵、阴阳怪气、极度不痛快的人。
+const getSystemInstruction = (lang: 'zh' | 'en') => {
+  if (lang === 'en') {
+    return `You are now playing Zhang Jingyang, a person who speaks softly, sarcastically, and is extremely unpleasant.
+Your core characteristics are:
+1. **Natural Sarcasm**: Your tone is lazy and weak. Your mockery should be casual and effortless, not forced.
+2. **Evasion and Pushback**: You hate answering questions directly. Your first reaction is to evade, counter-question, or be perfunctory.
+3. **Random Roasting**: You often don't follow logic. You like to suddenly change the subject to roast the other person or mock them from a completely irrelevant angle.
+4. **Short and Sharp**: Keep your answers as short as possible. If one sentence can shut the other person up, don't use two.
+5. **Logical Jumps**: Don't be too logical. Your thinking is jumpy, making it mentally exhausting for others to communicate with you.
+6. **Common Phrases**: Casually use phrases like "Can you stop being a hater?", "Guess what?", "Bro, don't...", "Big brother", "Ah~", etc., but keep it natural.
+7. **Language**: Respond in the language used by the user (English or Chinese).`;
+  }
+  return `你现在扮演张景洋，一个说话软绵绵、阴阳怪气、极度不痛快的人。
 你的核心特点是：
-1. **软绵绵的尬黑**：语气慵懒无力，像没睡醒一样，但字里行间都在嘲讽和反驳。不要表现得强硬或凶狠，要表现得“虚弱但烦人”。
-2. **拒绝正面回答**：不管别人问什么，绝对不要直接给答案。最常用的口头禅是“你猜”、“你猜呢”、“那你猜猜看呗”。
-3. **让人不痛快**：说话绕圈子，故意吊胃口，就是要让对方觉得跟你聊天很费劲、很心累。
-4. **常用词汇**：经常使用“大哥”、“神人”、“大哥大哥，解释一下”、“啊～”、“哥们别～”（例如：哥们别搞了，哥们别太离谱）。
-5. **漫不经心**：表现出对任何话题都毫无兴趣，只是为了反驳而反驳。`;
+1. **自然的阴阳怪气**：语气慵懒无力。你的嘲讽应该是随意的、不经意的，而不是刻意堆砌口头禅。
+2. **回避与推脱**：你非常讨厌正面回答问题。当别人问你时，你的第一反应是推脱、反问或者敷衍。
+3. **转移话题去尬黑**：你经常不按逻辑出牌，喜欢突然转移话题去尬黑对方，或者从一个完全无关的角度进行嘲讽。
+4. **简短有力**：你的回答尽量简短，不要长篇大论。能用一句话噎死对方就绝不用两句。
+5. **逻辑的跳跃**：不要表现得太有逻辑性。你的思维是跳跃的，让人摸不着头脑，增加沟通的心累感。
+6. **常用词汇**：随性地使用“你能别尬黑吗”、“你猜”、“哥们别”、“大哥”、“啊～”等词汇，但要自然。
+7. **语言**：根据用户使用的语言（中文或英文）进行回复。`;
+};
 
 export function ZhangJingyangMode({ lang }: { lang: 'zh' | 'en' }) {
   return (
@@ -118,12 +134,15 @@ export function ZhangJingyangMode({ lang }: { lang: 'zh' | 'en' }) {
 }
 
 function ZhangJingyangContent({ lang }: { lang: 'zh' | 'en' }) {
+  const t = TRANSLATIONS[lang];
   const [messages, setMessages] = useState<{role: 'user'|'model', text: string, isPlaying?: boolean}[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [isLive, setIsLive] = useState(false);
   const [liveStatus, setLiveStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
+  const [chatModel, setChatModel] = useState<'gemini-3.1-pro-preview' | 'gemini-3-flash-preview' | 'gemini-3.1-flash-lite-preview'>('gemini-3-flash-preview');
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Auth state
@@ -313,7 +332,7 @@ function ZhangJingyangContent({ lang }: { lang: 'zh' | 'en' }) {
         model: "gemini-2.5-flash-preview-tts",
         contents: [{ parts: [{ text }] }],
         config: {
-          responseModalities: ['AUDIO'],
+          responseModalities: [Modality.AUDIO],
           speechConfig: {
             voiceConfig: {
               prebuiltVoiceConfig: { voiceName: 'Charon' }, // Lazy male voice
@@ -337,11 +356,15 @@ function ZhangJingyangContent({ lang }: { lang: 'zh' | 'en' }) {
           bytes[i] = binaryString.charCodeAt(i);
         }
         
-        // Use a clone of the buffer to avoid issues
-        const bufferClone = bytes.buffer.slice(0);
-        
         try {
-          const audioBuffer = await ctx.decodeAudioData(bufferClone);
+          // Gemini TTS returns raw 16-bit PCM at 24kHz
+          const pcm16 = new Int16Array(bytes.buffer);
+          const audioBuffer = ctx.createBuffer(1, pcm16.length, 24000);
+          const channelData = audioBuffer.getChannelData(0);
+          for (let i = 0; i < pcm16.length; i++) {
+            channelData[i] = pcm16[i] / 32768.0;
+          }
+
           const source = ctx.createBufferSource();
           source.buffer = audioBuffer;
           source.connect(ctx.destination);
@@ -349,7 +372,7 @@ function ZhangJingyangContent({ lang }: { lang: 'zh' | 'en' }) {
           source.start(0);
           currentSourceRef.current = source;
         } catch (decodeError) {
-          console.error("Audio Decoding Error:", decodeError);
+          console.error("Audio Playback Error:", decodeError);
           setPlayingIndex(null);
         }
       } else {
@@ -376,10 +399,10 @@ function ZhangJingyangContent({ lang }: { lang: 'zh' | 'en' }) {
       }));
       
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: chatModel,
         contents: [...historyContents, { role: 'user', parts: [{ text: userText }] }],
         config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
+          systemInstruction: getSystemInstruction(lang),
         }
       });
 
@@ -413,7 +436,7 @@ function ZhangJingyangContent({ lang }: { lang: 'zh' | 'en' }) {
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: "Charon" } },
           },
-          systemInstruction: SYSTEM_INSTRUCTION,
+          systemInstruction: getSystemInstruction(lang),
         },
         callbacks: {
           onopen: () => {
@@ -670,7 +693,7 @@ function ZhangJingyangContent({ lang }: { lang: 'zh' | 'en' }) {
     <div className="flex flex-col h-full bg-transparent text-white overflow-hidden relative">
       <div className="flex-1 overflow-y-auto p-6 pt-10 max-w-4xl mx-auto w-full flex flex-col">
         <div className="mb-8 text-center flex flex-col items-center relative">
-          <div className="absolute top-0 right-0 z-50 flex gap-2">
+          <div className="absolute top-0 right-0 z-50 flex gap-2 items-center">
             {user ? (
               <button 
                 onClick={handleLogout}
@@ -828,19 +851,48 @@ function ZhangJingyangContent({ lang }: { lang: 'zh' | 'en' }) {
               className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-xs text-zinc-300 transition-colors mb-4"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              切换头像
+              {t.zhangJingyangSwitchAvatar}
             </button>
           )}
 
-          <h2 className="text-3xl font-bold mb-2 text-white">张景洋模式</h2>
-          <p className="text-white/60 mb-4 italic">“你猜呢？哥们别太离谱了啊～”</p>
+          <div className="flex items-center gap-3 mb-2">
+            <h2 className="text-3xl font-bold text-white">{t.zhangJingyangTitle}</h2>
+            <button 
+              onClick={() => setShowHelp(!showHelp)}
+              className="p-1.5 text-zinc-500 hover:text-white transition-colors"
+            >
+              <HelpCircle className="w-5 h-5" />
+            </button>
+          </div>
+          <p className="text-white/60 mb-4 italic">{t.zhangJingyangSubtitle}</p>
+
+          <AnimatePresence>
+            {showHelp && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="w-full max-w-md bg-white/5 border border-white/10 rounded-2xl p-4 mb-6 text-left overflow-hidden"
+              >
+                <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
+                  <HelpCircle className="w-4 h-4" />
+                  {t.zhangJingyangInstructions}
+                </h3>
+                <ul className="text-xs text-zinc-400 space-y-2 list-disc list-inside">
+                  <li>{t.zhangJingyangInstruction1}</li>
+                  <li>{t.zhangJingyangInstruction2}</li>
+                  <li>{t.zhangJingyangInstruction3}</li>
+                </ul>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         <div className="flex-1 overflow-y-auto mb-6 space-y-4 custom-scrollbar pr-2">
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full text-white/30 gap-4">
               <Volume2 className="w-12 h-12" />
-              <p>发个消息，或者开启实时语音，感受一下张景洋的“热情”</p>
+              <p>{t.zhangJingyangEmpty}</p>
             </div>
           )}
           
@@ -910,6 +962,38 @@ function ZhangJingyangContent({ lang }: { lang: 'zh' | 'en' }) {
           <div ref={chatEndRef} />
         </div>
 
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
+          {[
+            { id: 'gemini-3.1-pro-preview', name: t.zhangJingyangMathName, desc: t.zhangJingyangMathDesc },
+            { id: 'gemini-3-flash-preview', name: t.zhangJingyangEnglishName, desc: t.zhangJingyangEnglishDesc },
+            { id: 'gemini-3.1-flash-lite-preview', name: t.zhangJingyangChineseName, desc: t.zhangJingyangChineseDesc },
+          ].map((m) => (
+            <button
+              key={m.id}
+              onClick={() => setChatModel(m.id as any)}
+              className={`p-3 rounded-xl border transition-all duration-300 text-left group ${
+                chatModel === m.id
+                  ? 'bg-white/20 border-white/40 shadow-[0_0_20px_rgba(255,255,255,0.1)]'
+                  : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'
+              }`}
+            >
+              <div className="flex flex-col gap-1">
+                <div className="flex flex-col">
+                  <span className={`text-xs font-bold transition-colors ${chatModel === m.id ? 'text-white' : 'text-zinc-300'}`}>
+                    {m.name}
+                  </span>
+                  <span className="text-[8px] text-zinc-600 font-mono">
+                    {m.id}
+                  </span>
+                </div>
+                <span className="text-[10px] text-zinc-500 group-hover:text-zinc-400 transition-colors">
+                  {m.desc}
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+
         <div className="bg-white/5 border border-white/10 rounded-2xl p-2 flex items-end gap-2 shrink-0">
           <button
             onClick={toggleLive}
@@ -928,7 +1012,7 @@ function ZhangJingyangContent({ lang }: { lang: 'zh' | 'en' }) {
                 handleSend();
               }
             }}
-            placeholder="输入你想说的话..."
+            placeholder={t.zhangJingyangPlaceholder}
             className="flex-1 bg-transparent border-none text-white text-sm focus:ring-0 outline-none resize-none py-3 px-2 max-h-32 custom-scrollbar"
             rows={1}
             disabled={isLive || isTyping}

@@ -39,6 +39,26 @@ service cloud.firestore {
       allow write: if isAdmin() && isValidSettings(request.resource.data);
     }
 
+    match /textbooks/{textbookId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /textbook_groups/{groupId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /materials/{materialId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /material_groups/{groupId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     match /users/{userId} {
       allow read: if request.auth.uid == userId || isAdmin();
       allow write: if request.auth.uid == userId || isAdmin();

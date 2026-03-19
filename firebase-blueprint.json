@@ -27,12 +27,51 @@
         }
       },
       "required": ["avatarUrls", "currentAvatarIndex"]
+    },
+    "Textbook": {
+      "title": "Textbook or Material",
+      "description": "Represents a textbook or material PDF file.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "url": { "type": "string" },
+        "fileId": { "type": "string" },
+        "groupId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "url", "fileId"]
+    },
+    "TextbookGroup": {
+      "title": "Textbook or Material Group",
+      "description": "Represents a group/folder for textbooks or materials.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name"]
     }
   },
   "firestore": {
     "/settings/zhang_jingyang": {
       "schema": "ZhangJingyangSettings",
       "description": "Global settings document for Zhang Jingyang mode."
+    },
+    "/textbooks/{textbookId}": {
+      "schema": "Textbook",
+      "description": "Collection of textbooks."
+    },
+    "/textbook_groups/{groupId}": {
+      "schema": "TextbookGroup",
+      "description": "Collection of textbook groups."
+    },
+    "/materials/{materialId}": {
+      "schema": "Textbook",
+      "description": "Collection of materials."
+    },
+    "/material_groups/{groupId}": {
+      "schema": "TextbookGroup",
+      "description": "Collection of material groups."
     }
   }
 }
