@@ -125,17 +125,23 @@ Your core characteristics are:
 7. **语言**：根据用户使用的语言（中文或英文）进行回复。`;
 };
 
-export function ZhangJingyangMode({ lang }: { lang: 'zh' | 'en' }) {
+export function ZhangJingyangMode({ lang, onSaveHistory, initialData }: { lang: 'zh' | 'en', onSaveHistory?: (mode: string, summary: string, data: any) => void, initialData?: any }) {
   return (
     <ErrorBoundary>
-      <ZhangJingyangContent lang={lang} />
+      <ZhangJingyangContent lang={lang} onSaveHistory={onSaveHistory} initialData={initialData} />
     </ErrorBoundary>
   );
 }
 
-function ZhangJingyangContent({ lang }: { lang: 'zh' | 'en' }) {
+function ZhangJingyangContent({ lang, onSaveHistory, initialData }: { lang: 'zh' | 'en', onSaveHistory?: (mode: string, summary: string, data: any) => void, initialData?: any }) {
   const t = TRANSLATIONS[lang];
-  const [messages, setMessages] = useState<{role: 'user'|'model', text: string, isPlaying?: boolean}[]>([]);
+  const [messages, setMessages] = useState<{role: 'user'|'model', text: string, isPlaying?: boolean}[]>(initialData?.messages || []);
+  
+  useEffect(() => {
+    if (initialData?.messages) {
+      setMessages(initialData.messages);
+    }
+  }, [initialData]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -393,25 +399,64 @@ function ZhangJingyangContent({ lang }: { lang: 'zh' | 'en' }) {
     setIsTyping(true);
 
     try {
-      const historyContents = messages.map(m => ({
-        role: m.role,
-        parts: [{ text: m.text }]
-      }));
+      // Ensure alternating roles for Gemini API
+      const validHistory: { role: 'user' | 'model', parts: { text: string }[] }[] = [];
+      let expectedRole: 'user' | 'model' = 'user';
+      
+      for (const m of messages) {
+        if (m.role === expectedRole) {
+          validHistory.push({ role: m.role, parts: [{ text: m.text }] });
+          expectedRole = expectedRole === 'user' ? 'model' : 'user';
+        } else if (validHistory.length > 0) {
+          // If same role, append to the last message's text
+          validHistory[validHistory.length - 1].parts[0].text += '\n\n' + m.text;
+        }
+      }
+      
+      // If the last message in validHistory is 'user', we need to either drop it or merge the new userText
+      let finalContents = [...validHistory];
+      if (finalContents.length > 0 && finalContents[finalContents.length - 1].role === 'user') {
+        finalContents[finalContents.length - 1].parts[0].text += '\n\n' + userText;
+      } else {
+        finalContents.push({ role: 'user', parts: [{ text: userText }] });
+      }
       
       const response = await ai.models.generateContent({
         model: chatModel,
-        contents: [...historyContents, { role: 'user', parts: [{ text: userText }] }],
+        contents: finalContents,
         config: {
           systemInstruction: getSystemInstruction(lang),
         }
       });
 
       if (response.text) {
-        setMessages(prev => [...prev, { role: 'model', text: response.text! }]);
+        setMessages(prev => {
+          const newMessages = [...prev, { role: 'model', text: response.text! }];
+          if (onSaveHistory) {
+            let summary = lang === 'zh' ? '张景洋对话' : 'Zhang Jingyang Chat';
+            const firstUserMsg = newMessages.find((m: any) => m.role === 'user');
+            if (firstUserMsg && firstUserMsg.text) {
+              summary = firstUserMsg.text.substring(0, 30) + (firstUserMsg.text.length > 30 ? '...' : '');
+            }
+            onSaveHistory('zhang-jingyang', summary, { messages: newMessages });
+          }
+          return newMessages as any;
+        });
       }
     } catch (error) {
       console.error("Chat Error:", error);
-      setMessages(prev => [...prev, { role: 'model', text: "哥们别搞了，网络断了啊～" }]);
+      setMessages(prev => {
+        const newMessages = [...prev, { role: 'model', text: "哥们别搞了，网络断了啊～" }];
+        if (onSaveHistory) {
+          let summary = lang === 'zh' ? '张景洋对话' : 'Zhang Jingyang Chat';
+          const firstUserMsg = newMessages.find((m: any) => m.role === 'user');
+          if (firstUserMsg && firstUserMsg.text) {
+            summary = firstUserMsg.text.substring(0, 30) + (firstUserMsg.text.length > 30 ? '...' : '');
+          }
+          onSaveHistory('zhang-jingyang', summary, { messages: newMessages });
+        }
+        return newMessages as any;
+      });
     } finally {
       setIsTyping(false);
     }
@@ -430,7 +475,7 @@ function ZhangJingyangContent({ lang }: { lang: 'zh' | 'en' }) {
       audioProcessorRef.current.connect(liveAudioContextRef.current.destination);
 
       const sessionPromise = ai.live.connect({
-        model: "gemini-2.5-flash-native-audio-preview-09-2025",
+        model: "gemini-2.5-flash-native-audio-preview-12-2025",
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
@@ -458,11 +503,17 @@ function ZhangJingyangContent({ lang }: { lang: 'zh' | 'en' }) {
                   view.setInt16(i * 2, pcm16[i], true);
                 }
                 
-                const base64 = btoa(String.fromCharCode.apply(null, new Uint8Array(buffer) as any));
+                let binary = '';
+                const bytes = new Uint8Array(buffer);
+                const len = bytes.byteLength;
+                for (let i = 0; i < len; i++) {
+                  binary += String.fromCharCode(bytes[i]);
+                }
+                const base64 = btoa(binary);
                 
                 sessionPromise.then(session => {
                   session.sendRealtimeInput({
-                    media: {
+                    audio: {
                       mimeType: "audio/pcm;rate=16000",
                       data: base64
                     }
@@ -533,7 +584,15 @@ function ZhangJingyangContent({ lang }: { lang: 'zh' | 'en' }) {
         }
       });
       
-      sessionRef.current = await sessionPromise;
+      const session = await sessionPromise;
+      
+      // If stopLive was called while connecting, close the session immediately
+      if (liveAudioContextRef.current === null) {
+        try { session.close(); } catch (e) {}
+        return;
+      }
+      
+      sessionRef.current = session;
       
     } catch (err) {
       console.error("Failed to start live session:", err);
@@ -543,7 +602,8 @@ function ZhangJingyangContent({ lang }: { lang: 'zh' | 'en' }) {
 
   const stopLive = () => {
     if (sessionRef.current) {
-      // sessionRef.current.close();
+      try { sessionRef.current.close(); } catch (e) {}
+      sessionRef.current = null;
     }
     if (audioProcessorRef.current) {
       audioProcessorRef.current.disconnect();
@@ -559,7 +619,7 @@ function ZhangJingyangContent({ lang }: { lang: 'zh' | 'en' }) {
     activeSourcesRef.current = [];
     nextAudioTimeRef.current = 0;
     if (liveAudioContextRef.current) {
-      liveAudioContextRef.current.close();
+      try { liveAudioContextRef.current.close(); } catch (e) {}
       liveAudioContextRef.current = null;
     }
     setLiveStatus('disconnected');

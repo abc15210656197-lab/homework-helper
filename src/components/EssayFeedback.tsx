@@ -148,7 +148,7 @@ export function EssayFeedback({ lang, onSaveHistory, initialData, materials = []
       const fetchImages = async (urls: string[]) => {
         return Promise.all(urls.map(async url => {
           try {
-            const res = await fetch(url);
+            const res = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
             const blob = await res.blob();
             const base64 = await new Promise<string>((resolve) => {
               const reader = new FileReader();
@@ -290,7 +290,7 @@ Strict output: only two top-level fields: "annotations" (array) and "summary" (o
         const selectedMaterials = materials.filter(m => selectedMaterialIds.includes(m.id));
         for (const material of selectedMaterials) {
           try {
-            const response = await fetch(material.url);
+            const response = await fetch(`/api/proxy?url=${encodeURIComponent(material.url)}`);
             if (!response.ok) throw new Error('Failed to fetch PDF');
             const blob = await response.blob();
             const base64 = await new Promise<string>((resolve, reject) => {

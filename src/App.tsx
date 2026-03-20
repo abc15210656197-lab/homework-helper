@@ -5,7 +5,7 @@ import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import rehypeKatex from 'rehype-katex';
-import { Upload, Copy, Check, FileImage, Loader2, Trash2, AlertCircle, Camera, ArrowLeft, Info, BookOpen, ChevronRight, MessageCircle, Mic, Send, ChevronLeft, Maximize2, X, Book, FileText, Headphones, LineChart, Plus, Edit2, Palette, Globe, Keyboard, Image as ImageIcon, RefreshCw, Clock, Folder, LogIn, LogOut, PenTool, HelpCircle } from 'lucide-react';
+import { Upload, Copy, Check, FileImage, Loader2, Trash2, AlertCircle, Camera, ArrowLeft, Info, BookOpen, ChevronRight, MessageCircle, Mic, Send, ChevronLeft, Maximize2, X, Book, FileText, Headphones, LineChart, Plus, Edit2, Palette, Globe, Keyboard, Image as ImageIcon, RefreshCw, Clock, Folder, LogIn, LogOut, PenTool, HelpCircle, Beaker, Eye, EyeOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { InlineMath } from 'react-katex';
 
@@ -27,6 +27,7 @@ import 'github-markdown-css/github-markdown-dark.css';
 import { MaterialAssistant } from './components/MaterialAssistant';
 import { EssayFeedback } from './components/EssayFeedback';
 import { ZhangJingyangMode } from './components/ZhangJingyangMode';
+import { OrganicChemistryMode } from './components/OrganicChemistryMode';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -125,12 +126,18 @@ function ChatBox({ data, model, setModel, lang, textbooks, groups }: { data: Que
           const book = textbooks.find(b => b.id === id);
           if (book) {
             try {
-              const response = await fetch(book.url);
+              const response = await fetch(`/api/proxy?url=${encodeURIComponent(book.url)}`);
               if (!response.ok) throw new Error('Failed to fetch PDF');
-              const arrayBuffer = await response.arrayBuffer();
-              const base64 = btoa(
-                new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-              );
+              const blob = await response.blob();
+              const base64 = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                  const result = reader.result as string;
+                  resolve(result.split(',')[1]);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+              });
               textbookParts.push({ inlineData: { data: base64, mimeType: 'application/pdf' } });
             } catch (err) {
               console.error("Failed to fetch textbook PDF", err);
@@ -971,9 +978,11 @@ function BackgroundLines() {
 import { HistoryDrawer } from './components/HistoryDrawer';
 
 export default function App() {
-  const [appMode, setAppMode] = useState<'extractor' | 'audio-tutor' | 'reading-coach' | 'grapher' | 'material-assistant' | 'essay-feedback' | 'zhang-jingyang'>('extractor');
+  const [appMode, setAppMode] = useState<'extractor' | 'audio-tutor' | 'reading-coach' | 'grapher' | 'material-assistant' | 'essay-feedback' | 'zhang-jingyang' | 'organic-chemistry'>('extractor');
   const [materialAssistantData, setMaterialAssistantData] = useState<any>(null);
   const [essayFeedbackData, setEssayFeedbackData] = useState<any>(null);
+  const [organicChemistryData, setOrganicChemistryData] = useState<any>(null);
+  const [zhangJingyangData, setZhangJingyangData] = useState<any>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isUserGuideOpen, setIsUserGuideOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
@@ -1025,9 +1034,22 @@ export default function App() {
         if (file instanceof File) {
           formData.append('file', file);
         } else {
-          const res = await fetch(`data:${file.mimeType};base64,${file.base64}`);
-          const blob = await res.blob();
-          formData.append('file', blob, 'image.jpg');
+          // Convert base64 to blob without using fetch to avoid URL length limits
+          const byteCharacters = atob(file.base64);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: file.mimeType });
+          
+          // Determine extension from mimeType
+          let ext = 'jpg';
+          if (file.mimeType.includes('png')) ext = 'png';
+          else if (file.mimeType.includes('mp4')) ext = 'mp4';
+          else if (file.mimeType.includes('webm')) ext = 'webm';
+          
+          formData.append('file', blob, `file.${ext}`);
         }
 
         const uploadRes = await fetch('/api/upload', {
@@ -1073,7 +1095,7 @@ export default function App() {
       
       if (content && content.isCloudFile && content.url) {
         try {
-          const res = await fetch(content.url);
+          const res = await fetch(`/api/proxy?url=${encodeURIComponent(content.url)}`);
           if (res.ok) {
             content = await res.json();
           } else {
@@ -1088,8 +1110,9 @@ export default function App() {
 
       if (record.module === 'extractor') {
         setAppMode('extractor');
-        setQuestions(content.questions || []);
-        if (content.questions && content.questions.length > 0) {
+        const loadedQuestions = content.questions || (Array.isArray(content) ? content : []);
+        setQuestions(loadedQuestions);
+        if (loadedQuestions.length > 0) {
           setSelectedIdx(0);
         }
 
@@ -1097,7 +1120,7 @@ export default function App() {
         if (record.image_url) {
           setPreviewUrls([record.image_url]);
           try {
-            const response = await fetch(record.image_url);
+            const response = await fetch(`/api/proxy?url=${encodeURIComponent(record.image_url)}`);
             const blob = await response.blob();
             const file = new File([blob], "restored_image.jpg", { type: blob.type });
             setFiles([file]);
@@ -1127,6 +1150,12 @@ export default function App() {
       } else if (record.module === 'essay-feedback') {
         setAppMode('essay-feedback');
         setEssayFeedbackData(content);
+      } else if (record.module === 'organic-chemistry') {
+        setAppMode('organic-chemistry');
+        setOrganicChemistryData(content);
+      } else if (record.module === 'zhang-jingyang') {
+        setAppMode('zhang-jingyang');
+        setZhangJingyangData(content);
       }
     } catch (e) {
       console.error('Failed to parse history content', e);
@@ -1610,12 +1639,12 @@ export default function App() {
 CRITICAL INSTRUCTIONS:
 - OUTPUT LANGUAGE: ${language === 'zh' ? 'Chinese' : 'English'}.
 - Use STRICT LaTeX for ALL math symbols, chemical formulas (e.g., $Cl_2$, $H_2O$, $Na^+$, $SO_4^{2-}$), units (e.g., $mol/L$, $g/cm^3$), and formatting.
-- **Wrap EVERY single math/formula/unit/equation in $ for inline or $$ for block math. This is MANDATORY for chemical equations like $2NO_2 \rightleftharpoons N_2O_4$.**
-- Example: Use $Cl_2$ instead of Cl2, use $1 \text{ mol}$ instead of 1mol, use $2H_2 + O_2 \rightarrow 2H_2O$ for equations.
+- **Wrap EVERY single math/formula/unit/equation in $ for inline or $$ for block math. This is MANDATORY for chemical equations like $2NO_2 \\rightleftharpoons N_2O_4$.**
+- Example: Use $Cl_2$ instead of Cl2, use $1 \\text{ mol}$ instead of 1mol, use $2H_2 + O_2 \\rightarrow 2H_2O$ for equations.
 - Use standard numbering: (1), (2)... or ①, ②... for sub-questions. Use a., b.... for sub-sub-questions.
 - Preserve the original layout in the "question" field. **For multiple-choice questions, ensure each option (A, B, C, D) starts on a NEW line. This is CRITICAL.**
-- Return the result as a JSON array of objects.
-- Ensure all backslashes in LaTeX are properly escaped in the JSON string (e.g., "\\\\text" for \text).`,
+- Return the result as a JSON object containing an 'overall_summary' and an array of 'questions'.
+- Ensure all backslashes in LaTeX are properly escaped in the JSON string (e.g., "\\\\\\\\text" for \\text).`,
       });
 
       const response = await ai.models.generateContent({
@@ -1629,18 +1658,28 @@ CRITICAL INSTRUCTIONS:
             thinkingLevel: selectedModel.includes('flash') ? ThinkingLevel.LOW : ThinkingLevel.HIGH
           },
           responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                summary: { type: Type.STRING },
-                question: { type: Type.STRING },
-                answer: { type: Type.STRING },
-                explanation: { type: Type.STRING },
-                precautions: { type: Type.STRING },
+            type: Type.OBJECT,
+            properties: {
+              overall_summary: { 
+                type: Type.STRING,
+                description: "A brief 10-15 word summary of the overall topic or subject of all questions in the image"
               },
-              required: ['summary', 'question', 'answer', 'explanation', 'precautions'],
+              questions: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    summary: { type: Type.STRING },
+                    question: { type: Type.STRING },
+                    answer: { type: Type.STRING },
+                    explanation: { type: Type.STRING },
+                    precautions: { type: Type.STRING },
+                  },
+                  required: ['summary', 'question', 'answer', 'explanation', 'precautions'],
+                },
+              }
             },
+            required: ['overall_summary', 'questions']
           },
         },
       });
@@ -1648,9 +1687,21 @@ CRITICAL INSTRUCTIONS:
       const text = response.text;
       if (text) {
         const parsed = JSON.parse(text);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setQuestions(parsed);
-          saveHistory('extractor', parsed[0].summary, { questions: parsed }, files[0]);
+        
+        let extractedQuestions = [];
+        let summaryText = '';
+        
+        if (Array.isArray(parsed)) {
+          extractedQuestions = parsed;
+          summaryText = parsed[0]?.summary || (language === 'zh' ? '提取的题目' : 'Extracted Questions');
+        } else if (parsed && parsed.questions && Array.isArray(parsed.questions)) {
+          extractedQuestions = parsed.questions;
+          summaryText = parsed.overall_summary || extractedQuestions[0]?.summary || (language === 'zh' ? '提取的题目' : 'Extracted Questions');
+        }
+
+        if (extractedQuestions.length > 0) {
+          setQuestions(extractedQuestions);
+          saveHistory('extractor', summaryText, { questions: extractedQuestions }, files[0]);
         } else {
           setError(language === 'zh' ? '未识别到题目或返回格式错误。' : 'No questions identified or invalid format returned.');
         }
@@ -1882,11 +1933,27 @@ CRITICAL INSTRUCTIONS:
                   {language === 'zh' ? '张景洋模式' : 'Zhang Jingyang'}
                 </span>
               </button>
+
+              <button
+                onClick={() => setAppMode('organic-chemistry')}
+                className="group flex flex-col items-center gap-2 md:gap-3 transition-all duration-300 active:scale-95 relative"
+              >
+                <div className={`w-12 h-12 md:w-16 md:h-16 rounded-full flex items-center justify-center transition-all duration-500 border border-white/10 ${
+                  appMode === 'organic-chemistry'
+                    ? 'bg-white text-black shadow-[0_0_50px_rgba(255,255,255,0.7)] scale-105 z-10'
+                    : 'bg-black/40 text-white hover:bg-black/60 z-0'
+                }`}>
+                  <Beaker className="w-5 h-5 md:w-7 md:h-7" />
+                </div>
+                <span className={`text-[10px] md:text-xs font-medium transition-colors text-center ${appMode === 'organic-chemistry' ? 'text-white' : 'text-zinc-400'}`}>
+                  {language === 'zh' ? '有机大题' : 'Organic'}
+                </span>
+              </button>
             </div>
           </div>
 
           {/* Model Selection */}
-          {appMode !== 'reading-coach' && appMode !== 'grapher' && appMode !== 'zhang-jingyang' && (
+          {appMode !== 'reading-coach' && appMode !== 'grapher' && appMode !== 'zhang-jingyang' && appMode !== 'organic-chemistry' && (
             <div className="grid grid-cols-2 md:flex md:flex-nowrap gap-3 md:gap-4 justify-center py-2">
               {MODELS.map((m) => (
                 <button
@@ -1907,7 +1974,7 @@ CRITICAL INSTRUCTIONS:
           )}
 
           {/* Textbook Association Section */}
-          {appMode !== 'reading-coach' && appMode !== 'grapher' && appMode !== 'material-assistant' && appMode !== 'essay-feedback' && (
+          {appMode !== 'reading-coach' && appMode !== 'grapher' && appMode !== 'material-assistant' && appMode !== 'essay-feedback' && appMode !== 'organic-chemistry' && appMode !== 'zhang-jingyang' && (
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 p-4 rounded-3xl border border-white/5 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] bg-black/20 liquid-panel">
               <div className="flex flex-col md:flex-row md:items-center gap-4">
                 {appMode === 'audio-tutor' && (
@@ -2078,11 +2145,10 @@ CRITICAL INSTRUCTIONS:
                           <div key={f.id} className="group p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-white/20 transition-all space-y-4">
                             <div className="flex items-center justify-between gap-3">
                               <div className="flex items-center gap-3 flex-1 overflow-hidden">
-                                <div className="relative">
-                                  <button 
-                                    onClick={() => setGraphFunctions(graphFunctions.map(func => func.id === f.id ? { ...func, visible: !func.visible } : func))}
-                                    className={`w-5 h-5 rounded-full border-2 transition-all ${f.visible ? 'bg-current border-transparent' : 'bg-transparent border-zinc-600'}`}
-                                    style={{ color: f.color }}
+                                <div className="relative flex items-center justify-center w-5 h-5">
+                                  <div 
+                                    className={`w-3 h-3 rounded-full ${f.visible ? '' : 'opacity-30'}`}
+                                    style={{ backgroundColor: f.color }}
                                   />
                                 </div>
                                 <div className="flex-1 overflow-hidden">
@@ -2090,6 +2156,13 @@ CRITICAL INSTRUCTIONS:
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
+                                <button 
+                                  onClick={() => setGraphFunctions(graphFunctions.map(func => func.id === f.id ? { ...func, visible: !func.visible } : func))}
+                                  className={`p-2 rounded-xl transition-all border ${f.visible ? 'bg-white/5 text-zinc-400 hover:text-white border-white/5' : 'bg-white/10 text-white border-white/20'}`}
+                                  title={language === 'zh' ? (f.visible ? '隐藏' : '显示') : (f.visible ? 'Hide' : 'Show')}
+                                >
+                                  {f.visible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                                </button>
                                 <button 
                                   onClick={() => setGraphShowColorPicker(graphShowColorPicker === f.id ? null : f.id)}
                                   className={`p-2 rounded-xl transition-all border ${graphShowColorPicker === f.id ? 'bg-white text-black border-white' : 'bg-white/5 text-zinc-400 hover:text-white border-white/5'}`}
@@ -2312,17 +2385,31 @@ CRITICAL INSTRUCTIONS:
                           <div className="space-y-3">
                             <div className="flex items-center justify-between">
                               <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest">{language === 'zh' ? '识别结果' : 'Scanned Results'}</p>
-                              <button 
-                                onClick={() => {
-                                  graphScannedResults.forEach((res, i) => {
-                                    if (graphSelectedIndices.has(i)) addGraphFunction(res);
-                                  });
-                                  setGraphScannedResults([]);
-                                }}
-                                className="text-xs font-bold text-white bg-white/10 px-3 py-1 rounded-full hover:bg-white hover:text-black transition-all"
-                              >
-                                {language === 'zh' ? '全部添加' : 'Add All'}
-                              </button>
+                              <div className="flex items-center gap-2">
+                                <button 
+                                  onClick={() => {
+                                    if (graphSelectedIndices.size === graphScannedResults.length) {
+                                      setGraphSelectedIndices(new Set());
+                                    } else {
+                                      setGraphSelectedIndices(new Set(graphScannedResults.map((_, i) => i)));
+                                    }
+                                  }}
+                                  className="text-xs font-bold text-zinc-400 hover:text-white px-3 py-1 rounded-full hover:bg-white/10 transition-all"
+                                >
+                                  {language === 'zh' ? (graphSelectedIndices.size === graphScannedResults.length ? '取消全选' : '全选') : (graphSelectedIndices.size === graphScannedResults.length ? 'Deselect All' : 'Select All')}
+                                </button>
+                                <button 
+                                  onClick={() => {
+                                    graphScannedResults.forEach((res, i) => {
+                                      if (graphSelectedIndices.has(i)) addGraphFunction(res);
+                                    });
+                                    setGraphActiveTab('manual');
+                                  }}
+                                  className="text-xs font-bold text-white bg-white/10 px-3 py-1 rounded-full hover:bg-white hover:text-black transition-all"
+                                >
+                                  {language === 'zh' ? '添加选中' : 'Add Selected'}
+                                </button>
+                              </div>
                             </div>
                             <div className="max-h-48 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
                               {graphScannedResults.map((res, i) => (
@@ -2422,7 +2509,29 @@ CRITICAL INSTRUCTIONS:
               className="flex-1 flex flex-col"
             >
               <div className="flex-1 min-h-0 bg-zinc-900/50 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden shadow-2xl liquid-panel">
-                <ZhangJingyangMode lang={language} />
+                <ZhangJingyangMode 
+                  lang={language} 
+                  onSaveHistory={saveHistory} 
+                  initialData={zhangJingyangData}
+                />
+              </div>
+            </motion.div>
+          </div>
+
+          <div className={appMode === 'organic-chemistry' ? 'block flex-1 flex flex-col' : 'hidden'}>
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="flex-1 flex flex-col"
+            >
+              <div className="flex-1 min-h-0 bg-zinc-900/50 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden shadow-2xl liquid-panel">
+                <OrganicChemistryMode 
+                  lang={language} 
+                  model={selectedModel} 
+                  initialData={organicChemistryData}
+                  onSaveHistory={saveHistory}
+                />
               </div>
             </motion.div>
           </div>

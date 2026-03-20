@@ -278,12 +278,18 @@ export function AudioTutorView({
           const book = textbooks.find(b => b.id === id);
           if (book) {
             try {
-              const response = await fetch(book.url);
+              const response = await fetch(`/api/proxy?url=${encodeURIComponent(book.url)}`);
               if (!response.ok) throw new Error('Failed to fetch PDF');
-              const arrayBuffer = await response.arrayBuffer();
-              const base64 = btoa(
-                new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-              );
+              const blob = await response.blob();
+              const base64 = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                  const result = reader.result as string;
+                  resolve(result.split(',')[1]);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+              });
               textbookParts.push({ inlineData: { data: base64, mimeType: 'application/pdf' } });
             } catch (err) {
               console.error("Failed to fetch textbook PDF", err);
@@ -395,7 +401,9 @@ export function AudioTutorView({
       setState('done');
       
       if (onSaveHistory) {
-        onSaveHistory('audio-tutor', newData.overallExplanation.substring(0, 50), newData, files[0]);
+        const historyData = { ...newData };
+        delete historyData.imageBase64;
+        onSaveHistory('audio-tutor', newData.overallExplanation.substring(0, 50), historyData, files[0]);
       }
       
     } catch (err: any) {

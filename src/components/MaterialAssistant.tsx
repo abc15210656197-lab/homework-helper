@@ -45,7 +45,7 @@ export function MaterialAssistant({ lang, materials, groups, onManageMaterials, 
       setChatHistory(initialData.chatHistory || []);
       if (initialData.selectedMaterialIds) setSelectedMaterialIds(initialData.selectedMaterialIds);
       if (initialData.image_url) {
-        fetch(initialData.image_url)
+        fetch(`/api/proxy?url=${encodeURIComponent(initialData.image_url)}`)
           .then(res => res.blob())
           .then(blob => {
             const reader = new FileReader();
@@ -119,7 +119,7 @@ export function MaterialAssistant({ lang, materials, groups, onManageMaterials, 
       const selectedMaterials = materials.filter(m => selectedMaterialIds.includes(m.id));
       for (const material of selectedMaterials) {
         try {
-          const response = await fetch(material.url);
+          const response = await fetch(`/api/proxy?url=${encodeURIComponent(material.url)}`);
           if (!response.ok) throw new Error('Failed to fetch PDF');
           const blob = await response.blob();
           const base64 = await new Promise<string>((resolve, reject) => {
@@ -209,7 +209,7 @@ Requirements:
         const selectedMaterials = materials.filter(m => selectedMaterialIds.includes(m.id));
         for (const material of selectedMaterials) {
           try {
-            const response = await fetch(material.url);
+            const response = await fetch(`/api/proxy?url=${encodeURIComponent(material.url)}`);
             if (!response.ok) throw new Error('Failed to fetch PDF');
             const blob = await response.blob();
             const base64 = await new Promise<string>((resolve, reject) => {

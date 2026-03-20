@@ -254,6 +254,62 @@ export function ReadingCoach({ lang, onSaveHistory }: ReadingCoachProps) {
     setInaccurateWords([]);
 
     try {
+      // Convert the audio blob to WAV format for better compatibility with Gemini
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      
+      const numOfChan = audioBuffer.numberOfChannels;
+      const length = audioBuffer.length * numOfChan * 2 + 44;
+      const buffer = new ArrayBuffer(length);
+      const view = new DataView(buffer);
+      const channels = [];
+      let sample = 0;
+      let offset = 0;
+      let pos = 0;
+
+      const setUint16 = (data: number) => {
+        view.setUint16(pos, data, true);
+        pos += 2;
+      };
+
+      const setUint32 = (data: number) => {
+        view.setUint32(pos, data, true);
+        pos += 4;
+      };
+
+      setUint32(0x46464952); // "RIFF"
+      setUint32(length - 8); // file length - 8
+      setUint32(0x45564157); // "WAVE"
+
+      setUint32(0x20746d66); // "fmt " chunk
+      setUint32(16); // length = 16
+      setUint16(1); // PCM (uncompressed)
+      setUint16(numOfChan);
+      setUint32(audioBuffer.sampleRate);
+      setUint32(audioBuffer.sampleRate * 2 * numOfChan); // avg. bytes/sec
+      setUint16(numOfChan * 2); // block-align
+      setUint16(16); // 16-bit
+
+      setUint32(0x61746164); // "data" - chunk
+      setUint32(length - pos - 4); // chunk length
+
+      for (let i = 0; i < audioBuffer.numberOfChannels; i++) {
+        channels.push(audioBuffer.getChannelData(i));
+      }
+
+      while (pos < length) {
+        for (let i = 0; i < numOfChan; i++) {
+          sample = Math.max(-1, Math.min(1, channels[i][offset])); // clamp
+          sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767) | 0; // scale to 16-bit signed int
+          view.setInt16(pos, sample, true); // write 16-bit sample
+          pos += 2;
+        }
+        offset++; // next source sample
+      }
+
+      const wavBlob = new Blob([buffer], { type: "audio/wav" });
+
       const base64data = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => {
@@ -264,10 +320,10 @@ export function ReadingCoach({ lang, onSaveHistory }: ReadingCoachProps) {
           }
         };
         reader.onerror = reject;
-        reader.readAsDataURL(audioBlob);
+        reader.readAsDataURL(wavBlob);
       });
 
-      const mimeType = audioBlob.type || 'audio/webm';
+      const mimeType = 'audio/wav';
 
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       
@@ -302,7 +358,7 @@ IMPORTANT:
 }`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-lite-preview',
+        model: 'gemini-3-flash-preview',
         contents: [
           {
             role: 'user',

@@ -54,7 +54,7 @@ try {
 async function syncToCloud(uid: string) {
   if (!imagekit) return;
   try {
-    const stmt = db.prepare('SELECT * FROM history WHERE uid = ? ORDER BY created_at DESC');
+    const stmt = db.prepare('SELECT * FROM history WHERE uid = ? ORDER BY created_at DESC LIMIT 50');
     const records = stmt.all(uid);
     const buffer = Buffer.from(JSON.stringify(records), 'utf-8');
     await imagekit.upload({
@@ -112,7 +112,8 @@ async function restoreFromCloudIfNeeded(uid: string) {
 // Setup Multer for memory storage
 const upload = multer({ storage: multer.memoryStorage() });
 
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '500mb' }));
+app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
 // API Routes
 
@@ -189,6 +190,21 @@ app.post('/api/records', async (req, res) => {
   } catch (error) {
     console.error('Save history error:', error);
     res.status(500).json({ error: 'Failed to save history' });
+  }
+});
+
+app.get('/api/proxy', async (req, res) => {
+  const url = req.query.url as string;
+  if (!url) return res.status(400).send('URL required');
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const buffer = await response.arrayBuffer();
+    res.set('Content-Type', response.headers.get('content-type') || 'application/octet-stream');
+    res.send(Buffer.from(buffer));
+  } catch (e) {
+    console.error('Proxy error:', e);
+    res.status(500).send('Failed to fetch URL');
   }
 });
 
