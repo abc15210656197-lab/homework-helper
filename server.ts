@@ -12,42 +12,47 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
-// Initialize Database
-const dbPath = path.resolve(process.cwd(), 'history.db');
-const db = new Database(dbPath);
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    module TEXT NOT NULL,
-    summary TEXT NOT NULL,
-    content TEXT NOT NULL,
-    image_url TEXT,
-    image_file_id TEXT,
-    uid TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )
-`);
-
-// Add uid column if it doesn't exist (for existing databases)
-try {
-  db.exec(`ALTER TABLE history ADD COLUMN uid TEXT`);
-} catch (e) {
-  // Column already exists or other error
-}
+// Initialize Database lazily
+let db: any = null;
 
 // Initialize ImageKit lazily
 let imagekit: ImageKit | null = null;
-try {
-  if (process.env.IMAGEKIT_PUBLIC_KEY && process.env.IMAGEKIT_PRIVATE_KEY && process.env.IMAGEKIT_URL_ENDPOINT) {
-    imagekit = new ImageKit({
-      publicKey: process.env.IMAGEKIT_PUBLIC_KEY,
-      privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
-      urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT,
-    });
+
+function initServices() {
+  try {
+    const dbPath = path.resolve(process.cwd(), 'history.db');
+    db = new Database(dbPath);
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        module TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        content TEXT NOT NULL,
+        image_url TEXT,
+        image_file_id TEXT,
+        uid TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Add uid column if it doesn't exist (for existing databases)
+    try {
+      db.exec(`ALTER TABLE history ADD COLUMN uid TEXT`);
+    } catch (e) {
+      // Column already exists or other error
+    }
+
+    if (process.env.IMAGEKIT_PUBLIC_KEY && process.env.IMAGEKIT_PRIVATE_KEY && process.env.IMAGEKIT_URL_ENDPOINT) {
+      imagekit = new ImageKit({
+        publicKey: process.env.IMAGEKIT_PUBLIC_KEY,
+        privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
+        urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT,
+      });
+    }
+  } catch (e) {
+    console.error("Failed to initialize services:", e);
   }
-} catch (e) {
-  console.error("Failed to initialize ImageKit:", e);
 }
 
 // Cloud Sync Functions
@@ -312,20 +317,26 @@ app.delete('/api/records', async (req, res) => {
 });
 
 async function startServer() {
+  // Start listening immediately to satisfy platform health checks
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server listening on port ${PORT}, initializing services...`);
+  });
+
+  // Initialize DB and other services after listening
+  initServices();
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
+    console.log('Starting Vite in middleware mode...');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
+    console.log('Vite middleware integrated.');
   } else {
     app.use(express.static('dist'));
   }
-
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
 }
 
 startServer();

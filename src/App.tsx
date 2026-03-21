@@ -1,981 +1,49 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, Suspense, lazy } from 'react';
 import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import rehypeKatex from 'rehype-katex';
-import { Upload, Copy, Check, FileImage, Loader2, Trash2, AlertCircle, Camera, ArrowLeft, Info, BookOpen, ChevronRight, MessageCircle, Mic, Send, ChevronLeft, Maximize2, X, Book, FileText, Headphones, LineChart, Plus, Edit2, Palette, Globe, Keyboard, Image as ImageIcon, RefreshCw, Clock, Folder, LogIn, LogOut, PenTool, HelpCircle, Beaker, Eye, EyeOff } from 'lucide-react';
+import { Upload, Copy, Check, FileImage, Loader2, Trash2, AlertCircle, Camera, ArrowLeft, Info, BookOpen, ChevronRight, MessageCircle, Mic, Send, ChevronLeft, Maximize2, X, Book, FileText, Headphones, LineChart, Plus, Edit2, Palette, Globe, Keyboard, ImageIcon, RefreshCw, Clock, Folder, LogIn, LogOut, PenTool, HelpCircle, Beaker, Eye, EyeOff, Eraser, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { InlineMath } from 'react-katex';
 
 import { MODELS, TRANSLATIONS } from './constants';
-import { AudioTutorView } from './components/AudioTutor';
-import { UserGuideModal } from './components/UserGuideModal';
-import { TextbookManager, Textbook, TextbookGroup } from './components/TextbookManager';
-import { ReadingCoach } from './components/ReadingCoach';
-import GraphView from './components/GraphView';
-import MathKeyboard from './components/MathKeyboard';
-import { extractFunctionsFromImage, GraphScanMode } from './services/graphService';
-import { collection, getDocs } from 'firebase/firestore';
+import { Textbook, TextbookGroup } from './components/TextbookManager';
 import { db, auth } from './firebase';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User } from 'firebase/auth';
 import * as math from 'mathjs';
 import { formatContent } from './utils/formatUtils';
 import 'github-markdown-css/github-markdown-dark.css';
 
-import { MaterialAssistant } from './components/MaterialAssistant';
-import { EssayFeedback } from './components/EssayFeedback';
-import { ZhangJingyangMode } from './components/ZhangJingyangMode';
-import { OrganicChemistryMode } from './components/OrganicChemistryMode';
+// Lazy load heavy components
+const AudioTutorView = lazy(() => import('./components/AudioTutor').then(m => ({ default: m.AudioTutorView })));
+const ReadingCoach = lazy(() => import('./components/ReadingCoach').then(m => ({ default: m.ReadingCoach })));
+const GraphView = lazy(() => import('./components/GraphView'));
+const MaterialAssistant = lazy(() => import('./components/MaterialAssistant').then(m => ({ default: m.MaterialAssistant })));
+const EssayFeedback = lazy(() => import('./components/EssayFeedback').then(m => ({ default: m.EssayFeedback })));
+const ZhangJingyangMode = lazy(() => import('./components/ZhangJingyangMode').then(m => ({ default: m.ZhangJingyangMode })));
+const OrganicChemistryMode = lazy(() => import('./components/OrganicChemistryMode').then(m => ({ default: m.OrganicChemistryMode })));
+const DinoGame = lazy(() => import('./components/DinoGame').then(m => ({ default: m.DinoGame })));
+const MathKeyboard = lazy(() => import('./components/MathKeyboard'));
+const HistoryDrawer = lazy(() => import('./components/HistoryDrawer').then(m => ({ default: m.HistoryDrawer })));
+const UserGuideModal = lazy(() => import('./components/UserGuideModal').then(m => ({ default: m.UserGuideModal })));
+const TextbookManager = lazy(() => import('./components/TextbookManager').then(m => ({ default: m.TextbookManager })));
+const ChatBox = lazy(() => import('./components/ChatBox').then(m => ({ default: m.ChatBox })));
+const QuestionDetail = lazy(() => import('./components/QuestionDetail').then(m => ({ default: m.QuestionDetail })));
+const QuestionListItem = lazy(() => import('./components/QuestionDetail').then(m => ({ default: m.QuestionListItem })));
+const BackgroundLines = lazy(() => import('./components/Backgrounds').then(m => ({ default: m.BackgroundLines })));
+const BackgroundBubbles = lazy(() => import('./components/Backgrounds').then(m => ({ default: m.BackgroundBubbles })));
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 interface QuestionData {
-  summary: string;
   question: string;
   answer: string;
   explanation: string;
   precautions: string;
 }
-
-function ChatBox({ data, model, setModel, lang, textbooks, groups }: { data: QuestionData, model: string, setModel: (m: string) => void, lang: 'zh' | 'en', textbooks: Textbook[], groups: TextbookGroup[] }) {
-  const [messages, setMessages] = useState<{role: 'user' | 'model', text: string}[]>([]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [isFullScreen, setIsFullScreen] = useState(false);
-  const [selectedChatTextbookIds, setSelectedChatTextbookIds] = useState<string[]>([]);
-  const [showTextbookDropdown, setShowTextbookDropdown] = useState(false);
-  const chatContainerRef = useRef<HTMLDivElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const t = TRANSLATIONS[lang];
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowTextbookDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  useEffect(() => {
-    setMessages([]);
-    setInput('');
-  }, [data.question]);
-
-  useEffect(() => {
-    if (textbooks.length > 0 && selectedChatTextbookIds.length === 0) {
-      setSelectedChatTextbookIds(textbooks.map(b => b.id));
-    }
-  }, [textbooks]);
-
-  useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTo({
-        top: chatContainerRef.current.scrollHeight,
-        behavior: 'smooth'
-      });
-    }
-  }, [messages, loading]);
-
-  const startRecording = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert(lang === 'zh' ? '您的浏览器不支持语音识别。' : 'Your browser does not support speech recognition.');
-      return;
-    }
-    const recognition = new SpeechRecognition();
-    recognition.lang = lang === 'zh' ? 'zh-CN' : 'en-US';
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => setIsRecording(true);
-    recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      setInput(prev => prev + transcript);
-    };
-    recognition.onerror = (event: any) => {
-      console.error(event.error);
-      setIsRecording(false);
-    };
-    recognition.onend = () => setIsRecording(false);
-    recognition.start();
-  };
-
-  const handleSend = async (customText?: string) => {
-    const messageToSend = customText || input.trim();
-    if (!messageToSend) return;
-    
-    setInput('');
-    setMessages(prev => [...prev, { role: 'user', text: messageToSend }]);
-    setLoading(true);
-
-    try {
-      const history = messages.map(m => ({
-        role: m.role,
-        parts: [{ text: m.text }]
-      }));
-
-      let textbookParts: any[] = [];
-      let textbookInstruction = "";
-      if (selectedChatTextbookIds && selectedChatTextbookIds.length > 0) {
-        for (const id of selectedChatTextbookIds) {
-          const book = textbooks.find(b => b.id === id);
-          if (book) {
-            try {
-              const response = await fetch(`/api/proxy?url=${encodeURIComponent(book.url)}`);
-              if (!response.ok) throw new Error('Failed to fetch PDF');
-              const blob = await response.blob();
-              const base64 = await new Promise<string>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onloadend = () => {
-                  const result = reader.result as string;
-                  resolve(result.split(',')[1]);
-                };
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-              });
-              textbookParts.push({ inlineData: { data: base64, mimeType: 'application/pdf' } });
-            } catch (err) {
-              console.error("Failed to fetch textbook PDF", err);
-            }
-          }
-        }
-        if (textbookParts.length > 0) {
-          textbookInstruction = `\n\nCRITICAL: Textbook PDFs have been provided. You MUST use these textbooks to answer the user's question. When you use information from the textbooks, you MUST explicitly state the page number where the information is found (e.g., "According to page 45 of the textbook...").`;
-        }
-      }
-
-      const systemInstruction = `You are a helpful AI tutor. The user is asking about the following question:\n\nQuestion:\n${data.question}\n\nExplanation:\n${data.explanation}\n\nPrecautions:\n${data.precautions}\n\nAnswer the user's questions based on this context in ${lang === 'zh' ? 'Chinese' : 'English'}. ${textbookInstruction}
-
-CRITICAL INSTRUCTIONS:
-- You ONLY have access to the Question, Explanation, and Precautions text provided above, PLUS the textbook PDFs if provided.
-- Use STRICT LaTeX for ALL math symbols, chemical formulas (e.g., $Cl_2$, $H_2O$, $Na^+$, $SO_4^{2-}$), units (e.g., $mol/L$, $g/cm^3$), and formatting.
-- **Wrap EVERY single math/formula/unit/equation in $ for inline or $$ for block math. This is MANDATORY for chemical equations like $2NO_2 \rightleftharpoons N_2O_4$.**
-- Example: Use $Cl_2$ instead of Cl2, use $1 \text{ mol}$ instead of 1mol, use $2H_2 + O_2 \rightarrow 2H_2O$ for equations.
-- **For multiple-choice questions, ensure each option (A, B, C, D) starts on a NEW line.**
-- Be concise and professional.
-- Ensure all backslashes in LaTeX are properly escaped if you are returning JSON (though here you are returning raw text, still be careful with escape characters).`;
-
-      const contents: any[] = [...history];
-      
-      const userParts: any[] = [];
-      if (textbookParts.length > 0) {
-        userParts.push(...textbookParts);
-      }
-      userParts.push({ text: messageToSend });
-      
-      contents.push({ role: 'user', parts: userParts });
-
-      const response = await ai.models.generateContent({
-        model: model,
-        contents: contents,
-        config: {
-          systemInstruction,
-          thinkingConfig: {
-            thinkingLevel: model.includes('flash') ? ThinkingLevel.LOW : ThinkingLevel.HIGH
-          }
-        }
-      });
-
-      setMessages(prev => [...prev, { role: 'model', text: response.text || '' }]);
-    } catch (err: any) {
-      console.error(err);
-      const errorMsg = lang === 'zh' ? `错误: ${err.message}` : `Error: ${err.message}`;
-      setMessages(prev => [...prev, { role: 'model', text: errorMsg }]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const quickActions = [
-    { label: t.summaryAction, icon: '📝' },
-    { label: t.exampleAction, icon: '💡' },
-    { label: t.pitfallAction, icon: '⚠️' },
-  ];
-
-  const ChatContent = (
-    <div className={`flex flex-col ${isFullScreen ? 'h-full' : ''}`}>
-      <div className="flex items-center justify-between mb-4">
-        <div 
-          className="flex items-center gap-2 cursor-pointer group/header"
-          onClick={() => textbooks.length > 0 && setShowTextbookDropdown(!showTextbookDropdown)}
-        >
-          <div className="p-1.5 bg-white/10 rounded-lg ring-1 ring-white/20">
-            <MessageCircle className="w-4 h-4 text-white" />
-          </div>
-          <h4 className="font-semibold text-sm text-white tracking-tight group-hover/header:text-emerald-400 transition-colors">{t.aiChat}</h4>
-          {textbooks.length > 0 && (
-            <span className="text-[10px] text-zinc-500 bg-white/5 px-2 py-0.5 rounded-full border border-white/5">
-              {lang === 'zh' ? `已关联 ${selectedChatTextbookIds.length} 本` : `${selectedChatTextbookIds.length} linked`}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {textbooks.length > 0 && (
-            <div className="relative" ref={dropdownRef}>
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowTextbookDropdown(!showTextbookDropdown);
-                }}
-                className={`bg-black/40 hover:bg-white/5 border border-white/10 text-zinc-300 text-[10px] rounded-full px-3 py-1.5 outline-none focus:ring-1 focus:ring-white cursor-pointer backdrop-blur-md max-w-[140px] truncate flex items-center gap-1.5 transition-all ${showTextbookDropdown ? 'ring-1 ring-white bg-white/10' : ''}`}
-              >
-                <Folder className="w-3 h-3" />
-                {selectedChatTextbookIds.length === 0 
-                  ? (lang === 'zh' ? '不关联教材' : 'No textbook') 
-                  : (lang === 'zh' ? `选择教材` : `Select Books`)}
-              </button>
-              
-              <AnimatePresence>
-                {showTextbookDropdown && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className="absolute right-0 top-full mt-2 w-56 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl z-50 p-2 flex flex-col gap-1 max-h-64 overflow-y-auto custom-scrollbar backdrop-blur-xl"
-                  >
-                    <div className="px-2 py-1.5 mb-1 border-b border-white/5 flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-                        {lang === 'zh' ? '选择关联教材' : 'Select Textbooks'}
-                      </span>
-                      <button 
-                        onClick={() => setSelectedChatTextbookIds(selectedChatTextbookIds.length === textbooks.length ? [] : textbooks.map(b => b.id))}
-                        className="text-[10px] text-blue-400 hover:text-blue-300"
-                      >
-                        {selectedChatTextbookIds.length === textbooks.length ? (lang === 'zh' ? '取消全选' : 'Deselect All') : (lang === 'zh' ? '全选' : 'Select All')}
-                      </button>
-                    </div>
-                    
-                    {/* Render Groups */}
-                    {groups.map(group => {
-                      const groupBooks = textbooks.filter(b => b.groupId === group.id);
-                      if (groupBooks.length === 0) return null;
-                      const allGroupSelected = groupBooks.every(b => selectedChatTextbookIds.includes(b.id));
-                      
-                      return (
-                        <div key={group.id} className="mb-2">
-                          <div className="flex items-center justify-between px-2 py-1 mb-1">
-                            <span className="text-[10px] font-bold text-zinc-400 flex items-center gap-1">
-                              <Folder className="w-3 h-3" />
-                              {group.name}
-                            </span>
-                            <button 
-                              onClick={() => {
-                                if (allGroupSelected) {
-                                  setSelectedChatTextbookIds(prev => prev.filter(id => !groupBooks.find(b => b.id === id)));
-                                } else {
-                                  const newIds = [...selectedChatTextbookIds];
-                                  groupBooks.forEach(b => {
-                                    if (!newIds.includes(b.id)) newIds.push(b.id);
-                                  });
-                                  setSelectedChatTextbookIds(newIds);
-                                }
-                              }}
-                              className="text-[9px] text-zinc-500 hover:text-white"
-                            >
-                              {allGroupSelected ? (lang === 'zh' ? '取消' : 'None') : (lang === 'zh' ? '全选' : 'All')}
-                            </button>
-                          </div>
-                          {groupBooks.map(book => {
-                            const isSelected = selectedChatTextbookIds.includes(book.id);
-                            return (
-                              <button
-                                key={book.id}
-                                onClick={() => {
-                                  if (isSelected) {
-                                    setSelectedChatTextbookIds(prev => prev.filter(id => id !== book.id));
-                                  } else {
-                                    setSelectedChatTextbookIds(prev => [...prev, book.id]);
-                                  }
-                                }}
-                                className={`w-full text-left px-3 py-1.5 text-xs rounded-lg transition-all flex items-center justify-between group ${
-                                  isSelected ? 'bg-white/10 text-white font-medium' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
-                                }`}
-                              >
-                                <span className="truncate flex-1 mr-2">{book.name}</span>
-                                {isSelected && <Check className="w-3 h-3 shrink-0 text-white" />}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      );
-                    })}
-
-                    {/* Render Ungrouped */}
-                    {textbooks.filter(b => !b.groupId).length > 0 && (
-                      <div className="mb-2">
-                        <div className="flex items-center justify-between px-2 py-1 mb-1">
-                          <span className="text-[10px] font-bold text-zinc-400 flex items-center gap-1">
-                            <Folder className="w-3 h-3" />
-                            {lang === 'zh' ? '未分组' : 'Ungrouped'}
-                          </span>
-                          <button 
-                            onClick={() => {
-                              const ungroupedBooks = textbooks.filter(b => !b.groupId);
-                              const allUngroupedSelected = ungroupedBooks.every(b => selectedChatTextbookIds.includes(b.id));
-                              if (allUngroupedSelected) {
-                                setSelectedChatTextbookIds(prev => prev.filter(id => !ungroupedBooks.find(b => b.id === id)));
-                              } else {
-                                const newIds = [...selectedChatTextbookIds];
-                                ungroupedBooks.forEach(b => {
-                                  if (!newIds.includes(b.id)) newIds.push(b.id);
-                                });
-                                setSelectedChatTextbookIds(newIds);
-                              }
-                            }}
-                            className="text-[9px] text-zinc-500 hover:text-white"
-                          >
-                            {textbooks.filter(b => !b.groupId).every(b => selectedChatTextbookIds.includes(b.id)) ? (lang === 'zh' ? '取消' : 'None') : (lang === 'zh' ? '全选' : 'All')}
-                          </button>
-                        </div>
-                        {textbooks.filter(b => !b.groupId).map(book => {
-                          const isSelected = selectedChatTextbookIds.includes(book.id);
-                          return (
-                            <button
-                              key={book.id}
-                              onClick={() => {
-                                if (isSelected) {
-                                  setSelectedChatTextbookIds(prev => prev.filter(id => id !== book.id));
-                                } else {
-                                  setSelectedChatTextbookIds(prev => [...prev, book.id]);
-                                }
-                              }}
-                              className={`w-full text-left px-3 py-1.5 text-xs rounded-lg transition-all flex items-center justify-between group ${
-                                isSelected ? 'bg-white/10 text-white font-medium' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
-                              }`}
-                            >
-                              <span className="truncate flex-1 mr-2">{book.name}</span>
-                              {isSelected && <Check className="w-3 h-3 shrink-0 text-white" />}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          )}
-          <select 
-            value={model || ''} 
-            onChange={e => setModel(e.target.value)}
-            className="bg-black/40 hover:bg-white/5 border border-white/10 text-zinc-300 text-[10px] rounded-full px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-white cursor-pointer backdrop-blur-md appearance-none text-center min-w-[80px]"
-          >
-            {MODELS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
-          <button 
-            onClick={() => setIsFullScreen(!isFullScreen)}
-            className="p-1.5 bg-white/5 border border-white/10 rounded-full text-zinc-400 hover:text-white hover:bg-white/10 transition-all active:scale-95"
-            title={isFullScreen ? (lang === 'zh' ? '退出全屏' : 'Exit Full Screen') : (lang === 'zh' ? '全屏查看' : 'Full Screen')}
-          >
-            {isFullScreen ? <X className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-          </button>
-        </div>
-      </div>
-      
-      <div ref={chatContainerRef} className={`space-y-3 overflow-y-auto mb-3 pr-2 custom-scrollbar text-xs ${isFullScreen ? 'flex-1' : 'max-h-72'}`}>
-        {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-6 space-y-4">
-            <p className="text-zinc-500 text-xs">{t.askMe}</p>
-            <div className="flex flex-wrap justify-center gap-2">
-              {quickActions.map((action) => (
-                <button
-                  key={action.label}
-                  onClick={() => handleSend(action.label)}
-                  className="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-zinc-300 text-[10px] transition-all active:scale-95 flex items-center gap-1.5"
-                >
-                  <span>{action.icon}</span>
-                  {action.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        {messages.map((msg, i) => (
-          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[90%] rounded-2xl px-3 py-2 ${msg.role === 'user' ? 'bg-white text-black' : 'bg-zinc-800 text-zinc-200'}`}>
-              <div className="prose prose-invert prose-xs max-w-none">
-                <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} rehypePlugins={[rehypeKatex]}>
-                  {formatContent(msg.text)}
-                </ReactMarkdown>
-              </div>
-            </div>
-          </div>
-        ))}
-        {loading && (
-          <div className="flex justify-start">
-            <div className="max-w-[85%] rounded-2xl p-4 bg-zinc-800 text-zinc-400 flex items-center gap-2 text-sm">
-              <Loader2 className="w-4 h-4 animate-spin" /> {t.thinking}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="flex items-end gap-2">
-        <textarea
-          value={input || ''}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-          placeholder={t.placeholder}
-          className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 text-sm text-zinc-200 focus:outline-none focus:border-white/50 resize-none min-h-[40px] max-h-32"
-          rows={1}
-        />
-        <button
-          onClick={startRecording}
-          className={`p-3 rounded-xl border transition-colors ${isRecording ? 'bg-red-500/20 border-red-500 text-red-500 animate-pulse' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
-          title={lang === 'zh' ? '语音输入' : 'Voice Input'}
-        >
-          <Mic className="w-5 h-5" />
-        </button>
-        <button
-          onClick={() => handleSend()}
-          disabled={loading || !input.trim()}
-          className="p-3 rounded-xl bg-white text-black disabled:opacity-50 hover:bg-zinc-200 transition-colors shadow-[0_0_20px_rgba(255,255,255,0.4)] active:scale-95"
-        >
-          <Send className="w-5 h-5" />
-        </button>
-      </div>
-    </div>
-  );
-
-  return (
-    <>
-      <div className="rounded-2xl border border-white/10 p-4 md:p-5 backdrop-blur-3xl mt-4 shadow-[0_0_30px_rgba(0,0,0,0.5)] ring-1 ring-white/5 liquid-panel">
-        {ChatContent}
-      </div>
-
-      <AnimatePresence>
-        {isFullScreen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-3xl p-4 md:p-8 flex items-center justify-center"
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="w-full max-w-4xl h-full max-h-[90vh] border border-white/10 rounded-3xl p-6 overflow-hidden flex flex-col shadow-2xl ring-1 ring-white/10 liquid-panel-strong"
-            >
-              {ChatContent}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </>
-  );
-}
-
-function QuestionDetail({ 
-  data, onBack, onNext, onPrev, hasNext, hasPrev, model, setModel, lang, textbooks, groups,
-  allQuestions, currentIndex, onSelectQuestion
-}: { 
-  data: QuestionData; onBack: () => void; onNext: () => void; onPrev: () => void; hasNext: boolean; hasPrev: boolean; model: string; setModel: (m: string) => void; lang: 'zh' | 'en'; textbooks: Textbook[]; groups: TextbookGroup[];
-  allQuestions?: QuestionData[]; currentIndex?: number; onSelectQuestion?: (index: number) => void;
-}) {
-  const [copied, setCopied] = useState(false);
-  const [touchStart, setTouchStart] = useState<{x: number, y: number} | null>(null);
-  const [touchEnd, setTouchEnd] = useState<{x: number, y: number} | null>(null);
-  const [fullScreenPanel, setFullScreenPanel] = useState<'question' | 'explanation' | 'precautions' | 'answer' | null>(null);
-  const t = TRANSLATIONS[lang];
-
-  const [subQ, setSubQ] = useState<string | null>(null);
-  const [subSubQ, setSubSubQ] = useState<string | null>(null);
-
-  const structure = useMemo(() => {
-    const s: { label: string, children: string[] }[] = [];
-    // Match (1), (2), 1., 2., ①, ②
-    const regex1 = /(?:^|\s)(\(\d+\)|\d+\.|[\u2460-\u2473])(?=\s|$)/g;
-    let match;
-    const matches: { label: string, index: number }[] = [];
-    
-    let tempText = data.question;
-    while ((match = regex1.exec(tempText)) !== null) {
-      matches.push({ label: match[1], index: match.index });
-    }
-
-    if (matches.length > 0) {
-      matches.forEach((m, i) => {
-        const next = matches[i+1];
-        const content = data.question.slice(m.index, next ? next.index : undefined);
-        const children: string[] = [];
-        // Look for a. b. c. or a) b) c) or (a) (b) (c)
-        const regex2 = /(?:^|\s)(?:\(([a-z])\)|([a-z])(?:\.|\)))(?=\s)/g;
-        let m2;
-        while ((m2 = regex2.exec(content)) !== null) {
-          children.push(m2[1] || m2[2]);
-        }
-        s.push({ label: m.label, children });
-      });
-    }
-    return s;
-  }, [data.question]);
-
-  useEffect(() => {
-    if (structure.length > 0) {
-      setSubQ(structure[0].label);
-      setSubSubQ(structure[0].children.length > 0 ? structure[0].children[0] : null);
-    } else {
-      setSubQ(null);
-      setSubSubQ(null);
-    }
-  }, [structure]);
-
-  const getSegment = (text: string, l1: string | null, l2: string | null) => {
-    if (!l1 || !text) return text;
-    
-    const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const escapedL1 = escapeRegExp(l1);
-    
-    // Find start of L1
-    const regex1 = new RegExp(`(?:^|\\s)${escapedL1}(?=\\s|$)`);
-    const match1 = text.match(regex1);
-    if (!match1) return text;
-    const startIndex1 = match1.index!;
-    
-    // Find end of L1 (start of next L1 or end of text)
-    const regexAnyL1 = /(?:^|\s)(\(\d+\)|\d+\.|[\u2460-\u2473])(?=\s|$)/g;
-    regexAnyL1.lastIndex = startIndex1 + l1.length;
-    const nextMatch = regexAnyL1.exec(text);
-    const endIndex1 = nextMatch ? nextMatch.index : text.length;
-    
-    let content = text.slice(startIndex1, endIndex1);
-    
-    if (!l2) return content;
-    
-    // L2 logic
-    // Match a. or a) or (a)
-    const regex2 = new RegExp(`(?:^|\\s)(?:\\(${l2}\\)|${l2}(?:\\.|\\)))(?=\\s)`);
-    const match2 = content.match(regex2);
-    if (!match2) return content;
-    const startIndex2 = match2.index!;
-    
-    // Find end of L2
-    const regexAnyL2 = /(?:^|\s)(?:\([a-z]\)|[a-z](?:\.|\)))(?=\s)/g;
-    regexAnyL2.lastIndex = startIndex2 + 1;
-    const nextMatch2 = regexAnyL2.exec(content);
-    const endIndex2 = nextMatch2 ? nextMatch2.index : content.length;
-    
-    return content.slice(startIndex2, endIndex2);
-  };
-
-  const minSwipeDistance = 50;
-
-  const onTouchStart = (e: React.TouchEvent) => {
-    setTouchEnd(null);
-    setTouchStart({ x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY });
-  };
-
-  const onTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd({ x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY });
-  };
-
-  const onTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
-    const distanceX = touchStart.x - touchEnd.x;
-    const distanceY = touchStart.y - touchEnd.y;
-    
-    if (Math.abs(distanceX) > Math.abs(distanceY) && Math.abs(distanceX) > minSwipeDistance) {
-      if (distanceX > 0 && hasNext) {
-        onNext();
-      } else if (distanceX < 0 && hasPrev) {
-        onPrev();
-      }
-    }
-  };
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(data.question);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const PanelHeader = ({ title, icon: Icon, type, showCopy }: { title: string, icon: any, type: 'question' | 'explanation' | 'precautions' | 'answer', showCopy?: boolean }) => (
-    <div className="flex items-center justify-between px-5 py-2.5 border-b border-white/5 bg-white/5">
-      <div className="flex items-center gap-2">
-        <div className={`p-1.5 rounded-lg ring-1 ${
-          type === 'question' ? 'bg-white/10 ring-white/20' : 
-          type === 'answer' ? 'bg-rose-500/20 ring-rose-500/30' :
-          type === 'explanation' ? 'bg-emerald-500/20 ring-emerald-500/30' : 
-          'bg-amber-500/20 ring-amber-500/30'
-        }`}>
-          <Icon className={`w-4 h-4 ${
-            type === 'question' ? 'text-white' : 
-            type === 'answer' ? 'text-rose-400' :
-            type === 'explanation' ? 'text-emerald-400' : 
-            'text-amber-400'
-          }`} />
-        </div>
-        <h3 className="font-semibold text-xs text-white tracking-tight">{title}</h3>
-      </div>
-      <div className="flex items-center gap-2">
-        {showCopy && (
-          <button
-            onClick={handleCopy}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold text-zinc-900 bg-white rounded-full hover:bg-zinc-200 transition-all active:scale-95 shadow-[0_0_15px_rgba(255,255,255,0.2)]"
-          >
-            {copied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-            {copied ? t.copied : t.copy}
-          </button>
-        )}
-        <button 
-          onClick={() => setFullScreenPanel(fullScreenPanel === type ? null : type)}
-          className="p-1.5 bg-white/5 border border-white/10 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-all active:scale-95"
-          title={fullScreenPanel === type ? (lang === 'zh' ? '退出全屏' : 'Exit Full Screen') : (lang === 'zh' ? '全屏查看' : 'Full Screen')}
-        >
-          {fullScreenPanel === type ? <X className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-        </button>
-      </div>
-    </div>
-  );
-
-  const QuestionContent = (isFull: boolean) => (
-    <div className={`p-3 md:p-4 prose prose-invert prose-zinc prose-sm max-w-none overflow-x-auto bg-zinc-900/30 ${isFull ? 'flex-1 overflow-y-auto' : ''}`}>
-      <div className="markdown-body">
-        <ReactMarkdown 
-          remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} 
-          rehypePlugins={[rehypeKatex]}
-          components={{
-            img: ({node, src, ...props}) => {
-              if (!src) return null;
-              return <img src={src} {...props} className="rounded-lg border border-white/10 shadow-lg" />;
-            }
-          }}
-        >
-          {formatContent(getSegment(data.question, subQ, subSubQ))}
-        </ReactMarkdown>
-      </div>
-    </div>
-  );
-
-  const AnswerContent = (isFull: boolean) => (
-    <div className={`p-4 text-zinc-200 font-medium text-lg overflow-y-auto ${isFull ? 'flex-1' : ''}`}>
-      <div className="markdown-body">
-        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} rehypePlugins={[rehypeKatex]}>
-          {formatContent(getSegment(data.answer, subQ, subSubQ))}
-        </ReactMarkdown>
-      </div>
-    </div>
-  );
-
-  const ExplanationContent = (isFull: boolean) => (
-    <div className={`prose prose-invert prose-zinc prose-xs max-w-none text-zinc-300 leading-relaxed overflow-y-auto pr-2 custom-scrollbar ${isFull ? 'flex-1' : 'max-h-64'}`}>
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} rehypePlugins={[rehypeKatex]}>
-        {formatContent(getSegment(data.explanation, subQ, subSubQ))}
-      </ReactMarkdown>
-    </div>
-  );
-
-  const PrecautionsContent = (isFull: boolean) => (
-    <div className={`prose prose-invert prose-zinc prose-xs max-w-none text-zinc-300 leading-relaxed overflow-y-auto pr-2 custom-scrollbar ${isFull ? 'flex-1' : 'max-h-64'}`}>
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} rehypePlugins={[rehypeKatex]}>
-        {formatContent(getSegment(data.precautions, subQ, subSubQ))}
-      </ReactMarkdown>
-    </div>
-  );
-
-  return (
-    <motion.div
-      key={data.question}
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -20 }}
-      className="space-y-4"
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
-      onTouchEnd={onTouchEnd}
-    >
-      <div className="flex items-center justify-between mb-4">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors group"
-        >
-          <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-          {t.back}
-        </button>
-        <div className="flex items-center gap-2">
-          <button onClick={onPrev} disabled={!hasPrev} className="p-2 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 disabled:opacity-30 hover:text-white hover:bg-zinc-800 transition-colors">
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <button onClick={onNext} disabled={!hasNext} className="p-2 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 disabled:opacity-30 hover:text-white hover:bg-zinc-800 transition-colors">
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      {allQuestions && allQuestions.length > 1 && (
-        <div className="flex items-center gap-2 overflow-x-auto p-2 mb-4 bg-white/5 rounded-xl border border-white/5 no-scrollbar">
-          {allQuestions.map((q, idx) => {
-            let label = `${idx + 1}`;
-            const match = q.question.match(/^\s*\((\d+)\)/) || q.question.match(/^\s*(\d+)\./);
-            if (match) label = match[1];
-            
-            return (
-              <button
-                key={idx}
-                onClick={() => onSelectQuestion && onSelectQuestion(idx)}
-                className={`flex-shrink-0 w-8 h-8 rounded-lg text-xs font-bold flex items-center justify-center transition-all ${
-                  idx === currentIndex 
-                    ? 'bg-white text-black shadow-lg scale-110' 
-                    : 'bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-zinc-200'
-                }`}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {structure.length > 0 && (
-        <div className="flex flex-col gap-2 mb-4 animate-in fade-in slide-in-from-top-2 duration-300">
-          <div className="flex items-center gap-2 overflow-x-auto p-1 no-scrollbar">
-            {structure.map(s => (
-              <button
-                key={s.label}
-                onClick={() => { setSubQ(s.label); setSubSubQ(s.children.length > 0 ? s.children[0] : null); }}
-                className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
-                  subQ === s.label 
-                    ? 'bg-white text-black border-white shadow-lg scale-105' 
-                    : 'bg-white/5 text-zinc-400 border-white/5 hover:bg-white/10 hover:text-zinc-200'
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
-          
-          {subQ && structure.find(s => s.label === subQ)?.children && structure.find(s => s.label === subQ)!.children.length > 0 && (
-             <div className="flex items-center gap-2 overflow-x-auto p-1 pl-2 ml-1 border-l-2 border-white/10 no-scrollbar animate-in fade-in slide-in-from-left-2 duration-300">
-               {structure.find(s => s.label === subQ)?.children.map(child => (
-                 <button
-                   key={child}
-                   onClick={() => setSubSubQ(child)}
-                   className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
-                     subSubQ === child 
-                       ? 'bg-white text-black border-white shadow-lg scale-105' 
-                       : 'bg-white/5 text-zinc-400 border-white/5 hover:bg-white/10 hover:text-zinc-200'
-                   }`}
-                 >
-                   {child}
-                 </button>
-               ))}
-             </div>
-          )}
-        </div>
-      )}
-
-      <div className="rounded-2xl border border-white/10 overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-3xl ring-1 ring-white/5 liquid-panel">
-        <PanelHeader title={t.questionContent} icon={BookOpen} type="question" showCopy />
-        {QuestionContent(false)}
-      </div>
-
-      <div className="rounded-2xl border border-white/10 overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-3xl ring-1 ring-white/5 liquid-panel">
-        <PanelHeader title={t.answer} icon={Check} type="answer" />
-        {AnswerContent(false)}
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-3">
-        <div className="rounded-2xl border border-white/10 p-4 md:p-5 backdrop-blur-3xl ring-1 ring-white/5 liquid-panel">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-emerald-500/20 rounded-lg ring-1 ring-emerald-500/30">
-                <Info className="w-4 h-4 text-emerald-400" />
-              </div>
-              <h4 className="font-semibold text-xs text-white tracking-tight">{t.explanation}</h4>
-            </div>
-            <button 
-              onClick={() => setFullScreenPanel('explanation')}
-              className="p-1.5 bg-white/5 border border-white/10 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-all active:scale-95"
-              title={lang === 'zh' ? '全屏查看' : 'Full Screen'}
-            >
-              <Maximize2 className="w-4 h-4" />
-            </button>
-          </div>
-          {ExplanationContent(false)}
-        </div>
-
-        <div className="rounded-2xl border border-white/10 p-4 md:p-5 backdrop-blur-3xl ring-1 ring-white/5 liquid-panel">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-amber-500/20 rounded-lg ring-1 ring-amber-500/30">
-                <AlertCircle className="w-4 h-4 text-amber-400" />
-              </div>
-              <h4 className="font-semibold text-xs text-white tracking-tight">{t.precautions}</h4>
-            </div>
-            <button 
-              onClick={() => setFullScreenPanel('precautions')}
-              className="p-1.5 bg-white/5 border border-white/10 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-all active:scale-95"
-              title={lang === 'zh' ? '全屏查看' : 'Full Screen'}
-            >
-              <Maximize2 className="w-4 h-4" />
-            </button>
-          </div>
-          {PrecautionsContent(false)}
-        </div>
-      </div>
-      
-      <ChatBox data={data} model={model} setModel={setModel} lang={lang} textbooks={textbooks} groups={groups} />
-
-      <AnimatePresence>
-        {fullScreenPanel && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-3xl p-4 md:p-8 flex items-center justify-center"
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="w-full max-w-4xl h-full max-h-[90vh] border border-white/10 rounded-3xl overflow-hidden flex flex-col shadow-2xl ring-1 ring-white/10 liquid-panel-strong"
-            >
-              {fullScreenPanel === 'question' && (
-                <>
-                  <PanelHeader title={t.questionContent} icon={BookOpen} type="question" showCopy />
-                  {QuestionContent(true)}
-                </>
-              )}
-              {fullScreenPanel === 'answer' && (
-                <div className="p-6 flex flex-col h-full">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 bg-rose-500/20 rounded-lg ring-1 ring-rose-500/30">
-                        <Check className="w-4 h-4 text-rose-400" />
-                      </div>
-                      <h4 className="font-semibold text-sm text-white tracking-tight">{t.answer}</h4>
-                    </div>
-                    <button 
-                      onClick={() => setFullScreenPanel(null)}
-                      className="p-1.5 bg-white/10 border border-white/20 rounded-lg text-zinc-400 hover:text-white hover:bg-white/20 transition-all active:scale-95"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-                  <div className="p-4 text-zinc-200 font-medium text-lg flex-1 overflow-y-auto">
-                    {data.answer}
-                  </div>
-                </div>
-              )}
-              {fullScreenPanel === 'explanation' && (
-                <div className="p-6 flex flex-col h-full">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 bg-emerald-500/20 rounded-lg ring-1 ring-emerald-500/30">
-                        <Info className="w-4 h-4 text-emerald-400" />
-                      </div>
-                      <h4 className="font-semibold text-sm text-white tracking-tight">{t.explanation}</h4>
-                    </div>
-                    <button 
-                      onClick={() => setFullScreenPanel(null)}
-                      className="p-1.5 bg-white/10 border border-white/20 rounded-lg text-zinc-400 hover:text-white hover:bg-white/20 transition-all active:scale-95"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-                  {ExplanationContent(true)}
-                </div>
-              )}
-              {fullScreenPanel === 'precautions' && (
-                <div className="p-6 flex flex-col h-full">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 bg-amber-500/20 rounded-lg ring-1 ring-amber-500/30">
-                        <AlertCircle className="w-4 h-4 text-amber-400" />
-                      </div>
-                      <h4 className="font-semibold text-sm text-white tracking-tight">{t.precautions}</h4>
-                    </div>
-                    <button 
-                      onClick={() => setFullScreenPanel(null)}
-                      className="p-1.5 bg-white/10 border border-white/20 rounded-lg text-zinc-400 hover:text-white hover:bg-white/20 transition-all active:scale-95"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-                  {PrecautionsContent(true)}
-                </div>
-              )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
-  );
-}
-
-function QuestionListItem({ data, index, onClick, lang }: { data: QuestionData; index: number; onClick: () => void; lang: 'zh' | 'en' }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.05 }}
-      onClick={onClick}
-      className="group hover:bg-white/5 border border-white/10 hover:border-white/20 p-3.5 rounded-xl cursor-pointer transition-all duration-300 flex items-center justify-between shadow-lg backdrop-blur-2xl liquid-panel"
-    >
-      <div className="flex items-center gap-3 overflow-hidden">
-        <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-zinc-400 text-sm font-bold group-hover:bg-white group-hover:text-black transition-colors shrink-0">
-          {index + 1}
-        </div>
-        <div className="overflow-hidden">
-          <h4 className="text-zinc-200 text-sm font-medium truncate group-hover:text-white transition-colors">
-            {data.question.replace(/[$#*`]/g, '').slice(0, 40)}...
-          </h4>
-          <p className="text-zinc-500 text-[8px] mt-0.5 truncate uppercase tracking-wider">
-            {lang === 'zh' ? '点击查看详细讲解与注意事项' : 'Click to view detailed explanation and notes'}
-          </p>
-        </div>
-      </div>
-      <ChevronRight className="w-5 h-5 text-zinc-700 group-hover:text-white group-hover:translate-x-1 transition-all shrink-0" />
-    </motion.div>
-  );
-}
-
-function BackgroundLines() {
-  const verticalLines = [
-    { left: '15%', duration: 7, delay: 0 },
-    { left: '35%', duration: 9, delay: 2 },
-    { left: '55%', duration: 6, delay: 1 },
-    { left: '75%', duration: 8, delay: 3 },
-    { left: '95%', duration: 10, delay: 0.5 },
-  ];
-
-  const horizontalLines = [
-    { top: '15%', duration: 8, delay: 1 },
-    { top: '45%', duration: 10, delay: 3 },
-    { top: '75%', duration: 7, delay: 0 },
-  ];
-
-  return (
-    <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
-      {verticalLines.map((line, i) => (
-        <motion.div
-          key={`v-${i}`}
-          className="absolute w-[1px] h-[30vh] bg-gradient-to-b from-transparent via-white to-transparent shadow-[0_0_20px_rgba(255,255,255,0.5)]"
-          style={{ left: line.left, top: '-30vh' }}
-          animate={{ top: '130vh' }}
-          transition={{ duration: line.duration, repeat: Infinity, ease: "linear", delay: line.delay }}
-        />
-      ))}
-      {horizontalLines.map((line, i) => (
-        <motion.div
-          key={`h-${i}`}
-          className="absolute h-[1px] w-[30vw] bg-gradient-to-r from-transparent via-white to-transparent shadow-[0_0_20px_rgba(255,255,255,0.5)]"
-          style={{ top: line.top, left: '-30vw' }}
-          animate={{ left: '130vw' }}
-          transition={{ duration: line.duration, repeat: Infinity, ease: "linear", delay: line.delay }}
-        />
-      ))}
-    </div>
-  );
-}
-
-import { HistoryDrawer } from './components/HistoryDrawer';
 
 export default function App() {
   const [appMode, setAppMode] = useState<'extractor' | 'audio-tutor' | 'reading-coach' | 'grapher' | 'material-assistant' | 'essay-feedback' | 'zhang-jingyang' | 'organic-chemistry'>('extractor');
@@ -987,6 +55,17 @@ export default function App() {
   const [isUserGuideOpen, setIsUserGuideOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isAppReady, setIsAppReady] = useState(false);
+
+  useEffect(() => {
+    // Simulate initial app preparation (Vite compilation/resource loading)
+    const timer = setTimeout(() => setIsAppReady(true), 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const [clearKey, setClearKey] = useState(0);
+  const [theme, setTheme] = useState<'none' | 'lines' | 'bubbles'>('lines');
+  const [showThemeMenu, setShowThemeMenu] = useState(false);
 
   const adminEmail = 'abc15210656197@gmail.com';
   const isAdmin = user?.email === adminEmail;
@@ -1019,6 +98,45 @@ export default function App() {
       await signOut(auth);
     } catch (error) {
       console.error('Logout failed:', error);
+    }
+  };
+
+  const handleClearCurrentFeature = () => {
+    setClearKey(prev => prev + 1);
+    switch (appMode) {
+      case 'extractor':
+      case 'audio-tutor':
+        setFiles([]);
+        setPreviewUrls([]);
+        setQuestions([]);
+        setSelectedIdx(null);
+        setError(null);
+        break;
+      case 'grapher':
+        setGraphFunctions([]);
+        setGraphParameters({});
+        setGraphInputValue('');
+        setGraphEditingId(null);
+        setGraphActiveTab('manual');
+        setGraphScannedResults([]);
+        setGraphLastImageData(null);
+        setGraphSelectedIndices(new Set());
+        break;
+      case 'material-assistant':
+        setMaterialAssistantData(null);
+        break;
+      case 'essay-feedback':
+        setEssayFeedbackData(null);
+        break;
+      case 'organic-chemistry':
+        setOrganicChemistryData(null);
+        break;
+      case 'zhang-jingyang':
+        setZhangJingyangData(null);
+        break;
+      case 'reading-coach':
+        // Handled by clearKey
+        break;
     }
   };
 
@@ -1628,6 +746,31 @@ export default function App() {
 
       const parts: any[] = [...imageParts];
 
+      if (associateTextbook && selectedTextbookIds.length > 0 && textbooks.length > 0) {
+        for (const id of selectedTextbookIds) {
+          const book = textbooks.find(b => b.id === id);
+          if (book) {
+            try {
+              const response = await fetch(`/api/proxy?url=${encodeURIComponent(book.url)}`);
+              if (!response.ok) throw new Error('Failed to fetch PDF');
+              const blob = await response.blob();
+              const base64 = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                  const result = reader.result as string;
+                  resolve(result.split(',')[1]);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+              });
+              parts.push({ inlineData: { data: base64, mimeType: 'application/pdf' } });
+            } catch (err) {
+              console.error("Failed to fetch textbook PDF", err);
+            }
+          }
+        }
+      }
+
       parts.push({
         text: `Analyze the provided image and extract all questions. For each question, provide:
 1. summary: A short summary.
@@ -1714,11 +857,88 @@ CRITICAL INSTRUCTIONS:
     }
   };
 
+  if (!isAppReady || isAuthLoading) {
+    return (
+      <div className="fixed inset-0 bg-zinc-950 flex flex-col items-center justify-center z-[9999]">
+        <motion.div 
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="flex flex-col items-center"
+        >
+          <div className="w-20 h-20 rounded-3xl bg-white/10 border border-white/20 flex items-center justify-center mb-6 shadow-2xl relative overflow-hidden">
+            <motion.div 
+              animate={{ rotate: 360 }}
+              transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+              className="absolute inset-0 bg-gradient-to-tr from-emerald-500/20 via-transparent to-blue-500/20"
+            />
+            <Sparkles className="w-10 h-10 text-white relative z-10" />
+          </div>
+          <h1 className="text-2xl font-black text-white tracking-tighter mb-2">作业帮手 Pro</h1>
+          <div className="flex items-center gap-2 text-zinc-500 text-sm font-medium">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>智能学习助手正在启动...</span>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div className={`min-h-screen bg-black text-zinc-100 font-sans selection:bg-zinc-800 selection:text-white relative flex flex-col`}>
-      <BackgroundLines />
-      <div className={`max-w-4xl mx-auto px-4 py-4 md:py-8 relative z-10 flex-1 flex flex-col w-full`}>
-        <div className="flex justify-end items-center gap-3 mb-4">
+      <Suspense fallback={
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-[9999]">
+          <Loader2 className="w-8 h-8 text-white animate-spin" />
+        </div>
+      }>
+        {theme === 'lines' && <BackgroundLines />}
+        {theme === 'bubbles' && <BackgroundBubbles />}
+        <div className={`max-w-4xl mx-auto px-4 py-4 md:py-8 relative z-10 flex-1 flex flex-col w-full`}>
+        <div className="flex justify-between items-center gap-3 mb-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleClearCurrentFeature}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-full text-xs text-red-400 transition-colors h-8"
+              title={language === 'zh' ? '清空当前功能进度' : 'Clear current feature progress'}
+            >
+              <Trash2 className="w-4 h-4" />
+              {language === 'zh' ? '清空' : 'Clear'}
+            </button>
+            
+            <div className="relative">
+              <button 
+                onClick={() => setShowThemeMenu(!showThemeMenu)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-xs text-zinc-300 transition-colors h-8 ${showThemeMenu ? 'bg-white/10 border-white/20' : ''}`}
+              >
+                <Palette className="w-4 h-4" />
+                {language === 'zh' ? '主题' : 'Theme'}
+              </button>
+              <AnimatePresence>
+                {showThemeMenu && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowThemeMenu(false)} />
+                    <motion.div 
+                      initial={{ opacity: 0, y: 5, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 5, scale: 0.95 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute left-0 top-full mt-2 w-32 bg-zinc-900/90 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50"
+                    >
+                      <button onClick={() => { setTheme('none'); setShowThemeMenu(false); }} className={`w-full text-left px-3 py-2 text-xs hover:bg-white/10 ${theme === 'none' ? 'text-emerald-400' : 'text-zinc-300'}`}>
+                        {language === 'zh' ? '无 (纯黑)' : 'None (Black)'}
+                      </button>
+                      <button onClick={() => { setTheme('lines'); setShowThemeMenu(false); }} className={`w-full text-left px-3 py-2 text-xs hover:bg-white/10 ${theme === 'lines' ? 'text-emerald-400' : 'text-zinc-300'}`}>
+                        {language === 'zh' ? '流动线条' : 'Flowing Lines'}
+                      </button>
+                      <button onClick={() => { setTheme('bubbles'); setShowThemeMenu(false); }} className={`w-full text-left px-3 py-2 text-xs hover:bg-white/10 ${theme === 'bubbles' ? 'text-emerald-400' : 'text-zinc-300'}`}>
+                        {language === 'zh' ? '空灵气泡' : 'Ethereal Bubbles'}
+                      </button>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
           {user ? (
             <div className="relative">
               <button 
@@ -1800,6 +1020,7 @@ CRITICAL INSTRUCTIONS:
               EN
             </div>
           </div>
+        </div>
         </div>
         <header className="mb-4 text-center p-3 md:p-4 rounded-2xl border border-white/10 backdrop-blur-2xl shadow-2xl relative shrink-0 liquid-panel">
           <motion.h1 
@@ -1977,7 +1198,7 @@ CRITICAL INSTRUCTIONS:
           {appMode !== 'reading-coach' && appMode !== 'grapher' && appMode !== 'material-assistant' && appMode !== 'essay-feedback' && appMode !== 'organic-chemistry' && appMode !== 'zhang-jingyang' && (
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 p-4 rounded-3xl border border-white/5 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] bg-black/20 liquid-panel">
               <div className="flex flex-col md:flex-row md:items-center gap-4">
-                {appMode === 'audio-tutor' && (
+                {(appMode === 'audio-tutor' || appMode === 'extractor') && (
                   <>
                     <label className="flex items-center gap-3 cursor-pointer group">
                       <div className={`w-6 h-6 rounded-full border flex items-center justify-center transition-all duration-300 ${associateTextbook ? 'bg-white border-white shadow-[0_0_15px_rgba(255,255,255,0.4)]' : 'border-white/20 group-hover:border-white/50 bg-black/40'}`}>
@@ -2115,6 +1336,7 @@ CRITICAL INSTRUCTIONS:
                 <div className="lg:col-span-8 flex flex-col gap-4 h-[350px] md:h-[500px]">
                   <div className="flex-1 relative">
                     <GraphView 
+                      key={clearKey}
                       functions={graphFunctions.filter(f => f.visible).map(f => ({ expression: f.expression, color: f.color }))} 
                       parameters={graphParameters}
                       onSave={handleSaveGraph}
@@ -2448,6 +1670,7 @@ CRITICAL INSTRUCTIONS:
             >
               <div className="flex-1 min-h-[50vh] md:min-h-[70vh] rounded-2xl overflow-hidden border border-white/10 shadow-2xl bg-black/20 backdrop-blur-3xl liquid-panel">
                 <MaterialAssistant 
+                  key={clearKey}
                   lang={language} 
                   materials={materials} 
                   groups={materialGroups}
@@ -2469,6 +1692,7 @@ CRITICAL INSTRUCTIONS:
             >
               <div className="flex-1 min-h-[50vh] md:min-h-[70vh] rounded-2xl overflow-hidden border border-white/10 shadow-2xl bg-black/20 backdrop-blur-3xl liquid-panel">
                 <EssayFeedback 
+                  key={clearKey}
                   lang={language} 
                   onSaveHistory={saveHistory}
                   initialData={essayFeedbackData}
@@ -2490,6 +1714,7 @@ CRITICAL INSTRUCTIONS:
               className="flex-1 flex flex-col"
             >
               <AudioTutorView 
+                key={clearKey}
                 files={files} 
                 setFiles={setFiles} 
                 lang={language} 
@@ -2510,6 +1735,7 @@ CRITICAL INSTRUCTIONS:
             >
               <div className="flex-1 min-h-0 bg-zinc-900/50 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden shadow-2xl liquid-panel">
                 <ZhangJingyangMode 
+                  key={clearKey}
                   lang={language} 
                   onSaveHistory={saveHistory} 
                   initialData={zhangJingyangData}
@@ -2527,6 +1753,7 @@ CRITICAL INSTRUCTIONS:
             >
               <div className="flex-1 min-h-0 bg-zinc-900/50 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden shadow-2xl liquid-panel">
                 <OrganicChemistryMode 
+                  key={clearKey}
                   lang={language} 
                   model={selectedModel} 
                   initialData={organicChemistryData}
@@ -2544,7 +1771,7 @@ CRITICAL INSTRUCTIONS:
               className="flex-1 flex flex-col"
             >
               <div className="flex-1 min-h-[50vh] md:min-h-[70vh] rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
-                <ReadingCoach lang={language} onSaveHistory={saveHistory} />
+                <ReadingCoach key={clearKey} lang={language} onSaveHistory={saveHistory} />
               </div>
             </motion.div>
           </div>
@@ -2739,6 +1966,7 @@ CRITICAL INSTRUCTIONS:
           onClose={() => setShowTextbookManager(false)} 
           lang={language} 
           isAdmin={isAdmin}
+          uid={user?.uid}
         />
       )}
 
@@ -2747,7 +1975,8 @@ CRITICAL INSTRUCTIONS:
           onClose={() => setShowMaterialManager(false)} 
           lang={language} 
           type="material" 
-          isAdmin={isAdmin}
+          isAdmin={true}
+          uid={user?.uid}
         />
       )}
 
@@ -2764,6 +1993,7 @@ CRITICAL INSTRUCTIONS:
         onClose={() => setIsUserGuideOpen(false)}
         lang={language}
       />
+      </Suspense>
     </div>
   );
 }

@@ -1,0 +1,895 @@
+1:import React, { useState, useRef, useEffect, useMemo } from 'react';
+2:import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
+8:import { Upload, Copy, Check, FileImage, Loader2, Trash2, AlertCircle, Camera, ArrowLeft, Info, BookOpen, ChevronRight, MessageCircle, Mic, Send, ChevronLeft, Maximize2, X, Book, FileText, Headphones, LineChart, Plus, Edit2, Palette, Globe, Keyboard, Image as ImageIcon, RefreshCw, Clock, Folder, LogIn, LogOut, PenTool, HelpCircle, Beaker, Eye, EyeOff, Eraser } from 'lucide-react';
+9:import { motion, AnimatePresence } from 'framer-motion';
+10:import { InlineMath } from 'react-katex';
+12:import { MODELS, TRANSLATIONS } from './constants';
+13:import { AudioTutorView } from './components/AudioTutor';
+14:import { UserGuideModal } from './components/UserGuideModal';
+15:import { TextbookManager, Textbook, TextbookGroup } from './components/TextbookManager';
+16:import { ReadingCoach } from './components/ReadingCoach';
+19:import { extractFunctionsFromImage, GraphScanMode } from './services/graphService';
+20:import { collection, getDocs } from 'firebase/firestore';
+21:import { db, auth } from './firebase';
+22:import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User } from 'firebase/auth';
+24:import { formatContent } from './utils/formatUtils';
+27:import { MaterialAssistant } from './components/MaterialAssistant';
+28:import { EssayFeedback } from './components/EssayFeedback';
+29:import { ZhangJingyangMode } from './components/ZhangJingyangMode';
+30:import { OrganicChemistryMode } from './components/OrganicChemistryMode';
+32:const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+40:}
+42:function ChatBox({ data, model, setModel, lang, textbooks, groups }: { data: QuestionData, model: string, setModel: (m: string) => void, lang: 'zh' | 'en', textbooks: Textbook[], groups: TextbookGroup[] }) {
+43:  const [messages, setMessages] = useState<{role: 'user' | 'model', text: string}[]>([]);
+58:  };
+68:      }
+69:    };
+72:  }, []);
+77:  }, [data.question]);
+82:    }
+83:  }, [textbooks]);
+90:      });
+91:    }
+92:  }, [messages, loading]);
+99:    }
+109:    };
+113:    };
+116:  };
+123:    setMessages(prev => [...prev, { role: 'user', text: messageToSend }]);
+129:        parts: [{ text: m.text }]
+130:      }));
+139:              const response = await fetch(`/api/proxy?url=${encodeURIComponent(book.url)}`);
+147:                };
+150:              });
+151:              textbookParts.push({ inlineData: { data: base64, mimeType: 'application/pdf' } });
+152:            } catch (err) {
+154:            }
+155:          }
+156:        }
+159:        }
+160:      }
+162:      const systemInstruction = `You are a helpful AI tutor. The user is asking about the following question:\n\nQuestion:\n${data.question}\n\nExplanation:\n${data.explanation}\n\nPrecautions:\n${data.precautions}\n\nAnswer the user's questions based on this context in ${lang === 'zh' ? 'Chinese' : 'English'}. ${textbookInstruction}
+166:- Use STRICT LaTeX for ALL math symbols, chemical formulas (e.g., $Cl_2$, $H_2O$, $Na^+$, $SO_4^{2-}$), units (e.g., $mol/L$, $g/cm^3$), and formatting.
+168:- Example: Use $Cl_2$ instead of Cl2, use $1 \text{ mol}$ instead of 1mol, use $2H_2 + O_2 \rightarrow 2H_2O$ for equations.
+178:      }
+179:      userParts.push({ text: messageToSend });
+181:      contents.push({ role: 'user', parts: userParts });
+190:          }
+191:        }
+192:      });
+194:      setMessages(prev => [...prev, { role: 'model', text: response.text || '' }]);
+195:    } catch (err: any) {
+197:      const errorMsg = lang === 'zh' ? `错误: ${err.message}` : `Error: ${err.message}`;
+198:      setMessages(prev => [...prev, { role: 'model', text: errorMsg }]);
+199:    } finally {
+201:    }
+202:  };
+205:    { label: t.summaryAction, icon: '📝' },
+206:    { label: t.exampleAction, icon: '💡' },
+207:    { label: t.pitfallAction, icon: '⚠️' },
+211:    <div className={`flex flex-col ${isFullScreen ? 'h-full' : ''}`}>
+215:            onClick={clearChat}
+217:            title={lang === 'zh' ? '清空对话' : 'Clear Chat'}
+223:            onClick={() => textbooks.length > 0 && setShowTextbookDropdown(!showTextbookDropdown)}
+228:            <h4 className="font-semibold text-sm text-white tracking-tight group-hover/header:text-emerald-400 transition-colors">{t.aiChat}</h4>
+231:                {lang === 'zh' ? `已关联 ${selectedChatTextbookIds.length} 本` : `${selectedChatTextbookIds.length} linked`}
+233:            )}
+238:            <div className="relative" ref={dropdownRef}>
+243:                }}
+244:                className={`bg-black/40 hover:bg-white/5 border border-white/10 text-zinc-300 text-[10px] rounded-full px-3 py-1.5 outline-none focus:ring-1 focus:ring-white cursor-pointer backdrop-blur-md max-w-[140px] truncate flex items-center gap-1.5 transition-all ${showTextbookDropdown ? 'ring-1 ring-white bg-white/10' : ''}`}
+249:                  : (lang === 'zh' ? `选择教材` : `Select Books`)}
+255:                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+256:                    animate={{ opacity: 1, y: 0, scale: 1 }}
+257:                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+262:                        {lang === 'zh' ? '选择关联教材' : 'Select Textbooks'}
+265:                        onClick={() => setSelectedChatTextbookIds(selectedChatTextbookIds.length === textbooks.length ? [] : textbooks.map(b => b.id))}
+268:                        {selectedChatTextbookIds.length === textbooks.length ? (lang === 'zh' ? '取消全选' : 'Deselect All') : (lang === 'zh' ? '全选' : 'Select All')}
+272:                    {/* Render Groups */}
+279:                        <div key={group.id} className="mb-2">
+283:                              {group.name}
+289:                                } else {
+293:                                  });
+295:                                }
+296:                              }}
+299:                              {allGroupSelected ? (lang === 'zh' ? '取消' : 'None') : (lang === 'zh' ? '全选' : 'All')}
+306:                                key={book.id}
+310:                                  } else {
+312:                                  }
+313:                                }}
+316:                                }`}
+318:                                <span className="truncate flex-1 mr-2">{book.name}</span>
+319:                                {isSelected && <Check className="w-3 h-3 shrink-0 text-white" />}
+322:                          })}
+325:                    })}
+327:                    {/* Render Ungrouped */}
+333:                            {lang === 'zh' ? '未分组' : 'Ungrouped'}
+341:                              } else {
+345:                                });
+347:                              }
+348:                            }}
+351:                            {textbooks.filter(b => !b.groupId).every(b => selectedChatTextbookIds.includes(b.id)) ? (lang === 'zh' ? '取消' : 'None') : (lang === 'zh' ? '全选' : 'All')}
+358:                              key={book.id}
+362:                                } else {
+364:                                }
+365:                              }}
+368:                              }`}
+370:                              <span className="truncate flex-1 mr-2">{book.name}</span>
+371:                              {isSelected && <Check className="w-3 h-3 shrink-0 text-white" />}
+374:                        })}
+376:                    )}
+378:                )}
+381:          )}
+383:            value={model || ''} 
+384:            onChange={e => setModel(e.target.value)}
+387:            {MODELS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+390:            onClick={() => setIsFullScreen(!isFullScreen)}
+392:            title={isFullScreen ? (lang === 'zh' ? '退出全屏' : 'Exit Full Screen') : (lang === 'zh' ? '全屏查看' : 'Full Screen')}
+394:            {isFullScreen ? <X className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+399:      <div ref={chatContainerRef} className={`space-y-3 overflow-y-auto mb-3 pr-2 custom-scrollbar text-xs ${isFullScreen ? 'flex-1' : 'max-h-72'}`}>
+402:            <p className="text-zinc-500 text-xs">{t.askMe}</p>
+406:                  key={action.label}
+407:                  onClick={() => handleSend(action.label)}
+410:                  <span>{action.icon}</span>
+411:                  {action.label}
+413:              ))}
+416:        )}
+418:          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+419:            <div className={`max-w-[90%] rounded-2xl px-3 py-2 ${msg.role === 'user' ? 'bg-white text-black' : 'bg-zinc-800 text-zinc-200'}`}>
+421:                <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} rehypePlugins={[rehypeKatex]}>
+422:                  {formatContent(msg.text)}
+427:        ))}
+431:              <Loader2 className="w-4 h-4 animate-spin" /> {t.thinking}
+434:        )}
+439:          value={input || ''}
+440:          onChange={e => setInput(e.target.value)}
+441:          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+442:          placeholder={t.placeholder}
+444:          rows={1}
+447:          onClick={startRecording}
+448:          className={`p-3 rounded-xl border transition-colors ${isRecording ? 'bg-red-500/20 border-red-500 text-red-500 animate-pulse' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
+449:          title={lang === 'zh' ? '语音输入' : 'Voice Input'}
+454:          onClick={() => handleSend()}
+455:          disabled={loading || !input.trim()}
+467:        {ChatContent}
+473:            initial={{ opacity: 0 }}
+474:            animate={{ opacity: 1 }}
+475:            exit={{ opacity: 0 }}
+479:              initial={{ scale: 0.9, opacity: 0 }}
+480:              animate={{ scale: 1, opacity: 1 }}
+481:              exit={{ scale: 0.9, opacity: 0 }}
+484:              {ChatContent}
+487:        )}
+491:}
+496:}: { 
+499:}) {
+501:  const [touchStart, setTouchStart] = useState<{x: number, y: number} | null>(null);
+502:  const [touchEnd, setTouchEnd] = useState<{x: number, y: number} | null>(null);
+510:    const s: { label: string, children: string[] }[] = [];
+514:    const matches: { label: string, index: number }[] = [];
+518:      matches.push({ label: match[1], index: match.index });
+519:    }
+531:        }
+532:        s.push({ label: m.label, children });
+533:      });
+534:    }
+536:  }, [data.question]);
+542:    } else {
+545:    }
+546:  }, [structure]);
+551:    const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+555:    const regex1 = new RegExp(`(?:^|\\s)${escapedL1}(?=\\s|$)`);
+572:    const regex2 = new RegExp(`(?:^|\\s)(?:\\(${l2}\\)|${l2}(?:\\.|\\)))(?=\\s)`);
+584:  };
+590:    setTouchStart({ x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY });
+591:  };
+594:    setTouchEnd({ x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY });
+595:  };
+605:      } else if (distanceX < 0 && hasPrev) {
+607:      }
+608:    }
+609:  };
+615:  };
+617:  const PanelHeader = ({ title, icon: Icon, type, showCopy }: { title: string, icon: any, type: 'question' | 'explanation' | 'precautions' | 'answer', showCopy?: boolean }) => (
+625:        }`}>
+631:          }`} />
+633:        <h3 className="font-semibold text-xs text-white tracking-tight">{title}</h3>
+638:            onClick={handleCopy}
+641:            {copied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+642:            {copied ? t.copied : t.copy}
+644:        )}
+646:          onClick={() => setFullScreenPanel(fullScreenPanel === type ? null : type)}
+648:          title={fullScreenPanel === type ? (lang === 'zh' ? '退出全屏' : 'Exit Full Screen') : (lang === 'zh' ? '全屏查看' : 'Full Screen')}
+650:          {fullScreenPanel === type ? <X className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+657:    <div className={`p-3 md:p-4 prose prose-invert prose-zinc prose-sm max-w-none overflow-x-auto bg-zinc-900/30 ${isFull ? 'flex-1 overflow-y-auto' : ''}`}>
+660:          remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} 
+661:          rehypePlugins={[rehypeKatex]}
+663:            img: ({node, src, ...props}) => {
+665:              return <img src={src} {...props} className="rounded-lg border border-white/10 shadow-lg" />;
+666:            }
+667:          }}
+669:          {formatContent(getSegment(data.question, subQ, subSubQ))}
+676:    <div className={`p-4 text-zinc-200 font-medium text-lg overflow-y-auto ${isFull ? 'flex-1' : ''}`}>
+678:        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} rehypePlugins={[rehypeKatex]}>
+679:          {formatContent(getSegment(data.answer, subQ, subSubQ))}
+686:    <div className={`prose prose-invert prose-zinc prose-xs max-w-none text-zinc-300 leading-relaxed overflow-y-auto pr-2 custom-scrollbar ${isFull ? 'flex-1' : 'max-h-64'}`}>
+687:      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} rehypePlugins={[rehypeKatex]}>
+688:        {formatContent(getSegment(data.explanation, subQ, subSubQ))}
+694:    <div className={`prose prose-invert prose-zinc prose-xs max-w-none text-zinc-300 leading-relaxed overflow-y-auto pr-2 custom-scrollbar ${isFull ? 'flex-1' : 'max-h-64'}`}>
+695:      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} rehypePlugins={[rehypeKatex]}>
+696:        {formatContent(getSegment(data.precautions, subQ, subSubQ))}
+703:      key={data.question}
+704:      initial={{ opacity: 0, x: 20 }}
+705:      animate={{ opacity: 1, x: 0 }}
+706:      exit={{ opacity: 0, x: -20 }}
+708:      onTouchStart={onTouchStart}
+709:      onTouchMove={onTouchMove}
+710:      onTouchEnd={onTouchEnd}
+714:          onClick={onBack}
+718:          {t.back}
+721:          <button onClick={onPrev} disabled={!hasPrev} className="p-2 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 disabled:opacity-30 hover:text-white hover:bg-zinc-800 transition-colors">
+724:          <button onClick={onNext} disabled={!hasNext} className="p-2 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 disabled:opacity-30 hover:text-white hover:bg-zinc-800 transition-colors">
+733:            let label = `${idx + 1}`;
+739:                key={idx}
+740:                onClick={() => onSelectQuestion && onSelectQuestion(idx)}
+745:                }`}
+747:                {label}
+750:          })}
+752:      )}
+759:                key={s.label}
+760:                onClick={() => { setSubQ(s.label); setSubSubQ(s.children.length > 0 ? s.children[0] : null); }}
+765:                }`}
+767:                {s.label}
+769:            ))}
+776:                   key={child}
+777:                   onClick={() => setSubSubQ(child)}
+782:                   }`}
+784:                   {child}
+786:               ))}
+788:          )}
+790:      )}
+793:        <PanelHeader title={t.questionContent} icon={BookOpen} type="question" showCopy />
+794:        {QuestionContent(false)}
+798:        <PanelHeader title={t.answer} icon={Check} type="answer" />
+799:        {AnswerContent(false)}
+809:              <h4 className="font-semibold text-xs text-white tracking-tight">{t.explanation}</h4>
+812:              onClick={() => setFullScreenPanel('explanation')}
+814:              title={lang === 'zh' ? '全屏查看' : 'Full Screen'}
+819:          {ExplanationContent(false)}
+828:              <h4 className="font-semibold text-xs text-white tracking-tight">{t.precautions}</h4>
+831:              onClick={() => setFullScreenPanel('precautions')}
+833:              title={lang === 'zh' ? '全屏查看' : 'Full Screen'}
+838:          {PrecautionsContent(false)}
+842:      <ChatBox data={data} model={model} setModel={setModel} lang={lang} textbooks={textbooks} groups={groups} />
+847:            initial={{ opacity: 0 }}
+848:            animate={{ opacity: 1 }}
+849:            exit={{ opacity: 0 }}
+853:              initial={{ scale: 0.9, opacity: 0 }}
+854:              animate={{ scale: 1, opacity: 1 }}
+855:              exit={{ scale: 0.9, opacity: 0 }}
+860:                  <PanelHeader title={t.questionContent} icon={BookOpen} type="question" showCopy />
+861:                  {QuestionContent(true)}
+863:              )}
+871:                      <h4 className="font-semibold text-sm text-white tracking-tight">{t.answer}</h4>
+874:                      onClick={() => setFullScreenPanel(null)}
+881:                    {data.answer}
+884:              )}
+892:                      <h4 className="font-semibold text-sm text-white tracking-tight">{t.explanation}</h4>
+895:                      onClick={() => setFullScreenPanel(null)}
+901:                  {ExplanationContent(true)}
+903:              )}
+911:                      <h4 className="font-semibold text-sm text-white tracking-tight">{t.precautions}</h4>
+914:                      onClick={() => setFullScreenPanel(null)}
+920:                  {PrecautionsContent(true)}
+922:              )}
+925:        )}
+929:}
+931:function QuestionListItem({ data, index, onClick, lang }: { data: QuestionData; index: number; onClick: () => void; lang: 'zh' | 'en' }) {
+934:      initial={{ opacity: 0, y: 20 }}
+935:      animate={{ opacity: 1, y: 0 }}
+936:      transition={{ delay: index * 0.05 }}
+937:      onClick={onClick}
+942:          {index + 1}
+946:            {data.question.replace(/[$#*`]/g, '').slice(0, 40)}...
+949:            {lang === 'zh' ? '点击查看详细讲解与注意事项' : 'Click to view detailed explanation and notes'}
+956:}
+960:    { left: '15%', duration: 7, delay: 0 },
+961:    { left: '35%', duration: 9, delay: 2 },
+962:    { left: '55%', duration: 6, delay: 1 },
+963:    { left: '75%', duration: 8, delay: 3 },
+964:    { left: '95%', duration: 10, delay: 0.5 },
+968:    { top: '15%', duration: 8, delay: 1 },
+969:    { top: '45%', duration: 10, delay: 3 },
+970:    { top: '75%', duration: 7, delay: 0 },
+977:          key={`v-${i}`}
+979:          style={{ left: line.left, top: '-30vh' }}
+980:          animate={{ top: '130vh' }}
+981:          transition={{ duration: line.duration, repeat: Infinity, ease: "linear", delay: line.delay }}
+983:      ))}
+986:          key={`h-${i}`}
+988:          style={{ top: line.top, left: '-30vw' }}
+989:          animate={{ left: '130vw' }}
+990:          transition={{ duration: line.duration, repeat: Infinity, ease: "linear", delay: line.delay }}
+992:      ))}
+995:}
+1011:    const bubbles: { x: number, y: number, vx: number, vy: number, radius: number }[] = [];
+1021:      });
+1022:    }
+1054:            ctx.strokeStyle = `rgba(255, 255, 255, ${0.2 * (1 - dist / 100)})`;
+1064:            }
+1065:          }
+1066:        }
+1072:        }
+1073:      }
+1076:    };
+1085:    };
+1092:    };
+1093:  }, []);
+1095:  return <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-0" />;
+1096:}
+1098:import { HistoryDrawer } from './components/HistoryDrawer';
+1121:    }
+1125:    });
+1127:  }, []);
+1134:    } catch (error) {
+1136:    }
+1137:  };
+1143:    } catch (error) {
+1145:    }
+1146:  };
+1161:        setGraphParameters({});
+1181:    }
+1182:  };
+1184:  const saveHistory = async (module: string, summary: string, content: any, file?: File | { base64: string, mimeType: string }) => {
+1195:        } else {
+1201:          }
+1203:          const blob = new Blob([byteArray], { type: file.mimeType });
+1211:          formData.append('file', blob, `file.${ext}`);
+1212:        }
+1217:        });
+1223:        }
+1224:      } catch (e) {
+1226:      }
+1227:    }
+1232:        headers: { 'Content-Type': 'application/json' },
+1240:        })
+1241:      });
+1242:    } catch (e) {
+1244:    }
+1245:  };
+1253:      }
+1257:          const res = await fetch(`/api/proxy?url=${encodeURIComponent(content.url)}`);
+1260:          } else {
+1263:          }
+1264:        } catch (e) {
+1267:        }
+1268:      }
+1276:        }
+1282:            const response = await fetch(`/api/proxy?url=${encodeURIComponent(record.image_url)}`);
+1284:            const file = new File([blob], "restored_image.jpg", { type: blob.type });
+1286:          } catch (err) {
+1288:          }
+1289:        } else {
+1292:        }
+1293:      } else if (record.module === 'audio-tutor') {
+1296:      } else if (record.module === 'reading-coach') {
+1299:      } else if (record.module === 'grapher') {
+1303:      } else if (record.module === 'material-assistant') {
+1308:        });
+1309:      } else if (record.module === 'essay-feedback') {
+1312:      } else if (record.module === 'organic-chemistry') {
+1315:      } else if (record.module === 'zhang-jingyang') {
+1318:      }
+1319:    } catch (e) {
+1321:    }
+1322:  };
+1330:    };
+1333:  };
+1358:  const [graphFunctions, setGraphFunctions] = useState<{id: string, expression: string, visible: boolean, color: string}[]>([]);
+1359:  const [graphParameters, setGraphParameters] = useState<Record<string, any>>({});
+1366:  const [graphLastImageData, setGraphLastImageData] = useState<{ base64: string, mimeType: string } | null>(null);
+1387:      const placeholder = ` \uE000${i}\uE000 `;
+1390:    });
+1398:      processed = processed.replace(new RegExp(` \\uE000${i}\\uE000 `, 'g'), fn);
+1399:    });
+1402:  };
+1420:      .replace(/\\log_\{2\}/g, 'log2')
+1421:      .replace(/\\log_{10}/g, 'log10')
+1423:      .replace(/\\frac{([^{}]+)}{([^{}]+)}/g, '(($1)/($2))')
+1424:      .replace(/\\frac{([^{}]+)}{([^{}]+)}/g, '(($1)/($2))')
+1431:      .replace(/}/g, ')')
+1437:  };
+1447:      setGraphFunctions(prev => prev.map(f => f.id === graphEditingId ? { ...f, expression: expr } : f));
+1449:    } else {
+1456:        };
+1458:      });
+1459:    }
+1461:  };
+1474:            }
+1475:          } catch {
+1477:          }
+1478:        }
+1479:      });
+1482:        const newParams = { ...prev };
+1486:            newParams[v] = { name: v, value: 1, min: -10, max: 10, step: 0.1 };
+1488:          }
+1489:        });
+1491:      });
+1492:    } catch (e) {}
+1493:  };
+1506:    } else if (['sqrt(', 'abs(', 'log(', 'sin(', 'cos(', 'tan('].includes(text)) {
+1510:    } else {
+1513:    }
+1518:    }, 0);
+1519:  };
+1529:      setTimeout(() => { input.selectionStart = input.selectionEnd = start - 1; input.focus(); }, 0);
+1530:    } else if (start !== end) {
+1533:      setTimeout(() => { input.selectionStart = input.selectionEnd = start; input.focus(); }, 0);
+1534:    }
+1535:  };
+1544:  };
+1553:      if (parts.length > 1) { left = parts[0].trim(); right = parts[1].trim(); }
+1556:      let tex = node.toTex({ parenthesis: 'keep', implicit: 'hide' });
+1557:      return parts.length > 1 ? `${left} = ${tex}` : tex;
+1558:    } catch (e) {
+1559:      return expr.replace(/\//g, '\\div ').replace(/\*/g, '\\cdot ').replace(/sqrt\(([^)]+)\)/g, '\\sqrt{$1}').replace(/\(([^)]+)\)\/\(([^)]+)\)/g, '\\frac{$1}{$2}');
+1560:    }
+1561:  };
+1570:      setGraphLastImageData({ base64, mimeType: file.type });
+1575:      saveHistory('grapher', results.join(', '), { functions: results.map(r => ({ id: Math.random().toString(36).substr(2, 9), expression: r, visible: true, color: COLORS[0] })) }, { base64, mimeType: file.type });
+1576:    };
+1578:  };
+1591:    saveHistory('grapher', results.join(', '), { functions: results.map(r => ({ id: Math.random().toString(36).substr(2, 9), expression: r, visible: true, color: COLORS[0] })) }, graphLastImageData);
+1592:  };
+1596:  }, [showTextbookManager]);
+1600:  }, [showMaterialManager]);
+1609:        books.push({ id: doc.id, ...doc.data() } as Textbook);
+1610:      });
+1619:          } catch (e) {
+1621:          }
+1622:        }
+1623:      }
+1629:      });
+1631:    } catch (err) {
+1639:        } catch (e) {
+1641:        }
+1642:      } else {
+1644:      }
+1645:    }
+1646:  };
+1656:        loadedGroups.push({ id: doc.id, ...doc.data() } as TextbookGroup);
+1657:      });
+1662:      });
+1665:    } catch (err) {
+1672:        } catch (e) {
+1674:        }
+1675:      }
+1676:    }
+1677:  };
+1686:        books.push({ id: doc.id, ...doc.data() } as Textbook);
+1687:      });
+1696:          } catch (e) {
+1698:          }
+1699:        }
+1700:      }
+1706:      });
+1712:      }
+1713:    } catch (err) {
+1723:          }
+1724:        } catch (e) {
+1726:        }
+1727:      } else {
+1729:      }
+1730:    }
+1731:  };
+1737:    }
+1738:  };
+1749:  };
+1758:    });
+1759:  };
+1771:  };
+1784:        });
+1785:        return { inlineData: { data: base64Data, mimeType: f.type } };
+1786:      }));
+1799:- OUTPUT LANGUAGE: ${language === 'zh' ? 'Chinese' : 'English'}.
+1800:- Use STRICT LaTeX for ALL math symbols, chemical formulas (e.g., $Cl_2$, $H_2O$, $Na^+$, $SO_4^{2-}$), units (e.g., $mol/L$, $g/cm^3$), and formatting.
+1802:- Example: Use $Cl_2$ instead of Cl2, use $1 \\text{ mol}$ instead of 1mol, use $2H_2 + O_2 \\rightarrow 2H_2O$ for equations.
+1807:      });
+1813:        },
+1818:          },
+1825:              },
+1831:                    summary: { type: Type.STRING },
+1832:                    question: { type: Type.STRING },
+1833:                    answer: { type: Type.STRING },
+1834:                    explanation: { type: Type.STRING },
+1835:                    precautions: { type: Type.STRING },
+1836:                  },
+1838:                },
+1839:              }
+1840:            },
+1842:          },
+1843:        },
+1844:      });
+1856:        } else if (parsed && parsed.questions && Array.isArray(parsed.questions)) {
+1859:        }
+1863:          saveHistory('extractor', summaryText, { questions: extractedQuestions }, files[0]);
+1864:        } else {
+1866:        }
+1867:      }
+1868:    } catch (err: any) {
+1871:    } finally {
+1873:    }
+1874:  };
+1877:    <div className={`min-h-screen bg-black text-zinc-100 font-sans selection:bg-zinc-800 selection:text-white relative flex flex-col`}>
+1878:      {theme === 'lines' && <BackgroundLines />}
+1879:      {theme === 'bubbles' && <BackgroundBubbles />}
+1880:      <div className={`max-w-4xl mx-auto px-4 py-4 md:py-8 relative z-10 flex-1 flex flex-col w-full`}>
+1884:              onClick={handleClearCurrentFeature}
+1886:              title={language === 'zh' ? '清空当前功能进度' : 'Clear current feature progress'}
+1889:              {language === 'zh' ? '清空' : 'Clear'}
+1895:                {language === 'zh' ? '主题' : 'Theme'}
+1898:                <button onClick={() => setTheme('none')} className={`w-full text-left px-3 py-2 text-xs hover:bg-white/10 ${theme === 'none' ? 'text-emerald-400' : 'text-zinc-300'}`}>
+1899:                  {language === 'zh' ? '无 (纯黑)' : 'None (Black)'}
+1901:                <button onClick={() => setTheme('lines')} className={`w-full text-left px-3 py-2 text-xs hover:bg-white/10 ${theme === 'lines' ? 'text-emerald-400' : 'text-zinc-300'}`}>
+1902:                  {language === 'zh' ? '流动线条' : 'Flowing Lines'}
+1904:                <button onClick={() => setTheme('bubbles')} className={`w-full text-left px-3 py-2 text-xs hover:bg-white/10 ${theme === 'bubbles' ? 'text-emerald-400' : 'text-zinc-300'}`}>
+1905:                  {language === 'zh' ? '空灵气泡' : 'Ethereal Bubbles'}
+1914:                onClick={() => setShowUserMenu(!showUserMenu)}
+1917:                {user.photoURL && <img src={user.photoURL} alt={user.displayName || ''} className="w-6 h-6 rounded-full border border-white/20 hover:border-white/40 transition-colors" />}
+1925:                      onClick={() => setShowUserMenu(false)}
+1928:                      initial={{ opacity: 0, y: 5, scale: 0.95 }}
+1929:                      animate={{ opacity: 1, y: 0, scale: 1 }}
+1930:                      exit={{ opacity: 0, y: 5, scale: 0.95 }}
+1931:                      transition={{ duration: 0.15 }}
+1938:                        }}
+1942:                        {language === 'zh' ? '注销' : 'Logout'}
+1946:                )}
+1951:              onClick={handleLogin}
+1955:              {language === 'zh' ? '登录' : 'Login'}
+1957:          )}
+1959:            onClick={() => setIsHistoryOpen(true)}
+1963:            {language === 'zh' ? '历史' : 'History'}
+1966:            onClick={() => setIsUserGuideOpen(true)}
+1970:            {language === 'zh' ? '使用指引' : 'Guide'}
+1974:            onClick={() => setLanguage(prev => prev === 'zh' ? 'en' : 'zh')}
+1978:              initial={false}
+1982:              }}
+1983:              transition={{ type: "spring", stiffness: 500, damping: 35 }}
+1985:            <div className={`flex-1 text-center text-[9px] font-black z-10 transition-colors duration-300 ${language === 'zh' ? 'text-white' : 'text-zinc-500'}`}>
+1988:            <div className={`flex-1 text-center text-[9px] font-black z-10 transition-colors duration-300 ${language === 'en' ? 'text-white' : 'text-zinc-500'}`}>
+1995:            initial={{ opacity: 0, y: -20 }}
+1996:            animate={{ opacity: 1, y: 0 }}
+1999:            {t.title} <span className="text-white">Pro</span>
+2002:            initial={{ opacity: 0 }}
+2003:            animate={{ opacity: 1 }}
+2004:            transition={{ delay: 0.2 }}
+2007:            {t.subtitle}
+2011:        <main className={`space-y-6 flex-1 flex flex-col`}>
+2015:                onClick={() => setAppMode('extractor')}
+2022:                }`}>
+2025:                <span className={`text-[10px] md:text-xs font-medium transition-colors text-center ${appMode === 'extractor' ? 'text-white' : 'text-zinc-400'}`}>
+2026:                  {t.extractorMode}
+2031:                onClick={() => setAppMode('audio-tutor')}
+2038:                }`}>
+2041:                <span className={`text-[10px] md:text-xs font-medium transition-colors text-center ${appMode === 'audio-tutor' ? 'text-white' : 'text-zinc-400'}`}>
+2042:                  {t.audioTutorMode}
+2047:                onClick={() => setAppMode('grapher')}
+2054:                }`}>
+2057:                <span className={`text-[10px] md:text-xs font-medium transition-colors text-center ${appMode === 'grapher' ? 'text-white' : 'text-zinc-400'}`}>
+2058:                  {t.grapherMode}
+2063:                onClick={() => setAppMode('reading-coach')}
+2070:                }`}>
+2073:                <span className={`text-[10px] md:text-xs font-medium transition-colors text-center ${appMode === 'reading-coach' ? 'text-white' : 'text-zinc-400'}`}>
+2074:                  {language === 'zh' ? '朗读纠错' : 'Reading Coach'}
+2079:                onClick={() => setAppMode('material-assistant')}
+2086:                }`}>
+2089:                <span className={`text-[10px] md:text-xs font-medium transition-colors text-center ${appMode === 'material-assistant' ? 'text-white' : 'text-zinc-400'}`}>
+2090:                  {language === 'zh' ? '语文素材' : 'Materials'}
+2095:                onClick={() => setAppMode('essay-feedback')}
+2102:                }`}>
+2105:                <span className={`text-[10px] md:text-xs font-medium transition-colors text-center ${appMode === 'essay-feedback' ? 'text-white' : 'text-zinc-400'}`}>
+2106:                  {language === 'zh' ? '作文讲评' : 'Essay Feedback'}
+2111:                onClick={() => setAppMode('zhang-jingyang')}
+2118:                }`}>
+2121:                <span className={`text-[10px] md:text-xs font-medium transition-colors text-center ${appMode === 'zhang-jingyang' ? 'text-white' : 'text-zinc-400'}`}>
+2122:                  {language === 'zh' ? '张景洋模式' : 'Zhang Jingyang'}
+2127:                onClick={() => setAppMode('organic-chemistry')}
+2134:                }`}>
+2137:                <span className={`text-[10px] md:text-xs font-medium transition-colors text-center ${appMode === 'organic-chemistry' ? 'text-white' : 'text-zinc-400'}`}>
+2138:                  {language === 'zh' ? '有机大题' : 'Organic'}
+2144:          {/* Model Selection */}
+2149:                  key={m.id}
+2150:                  onClick={() => setSelectedModel(m.id)}
+2151:                  className={`relative group transition-all duration-300 active:scale-95`}
+2157:                  }`}>
+2158:                    <span className="font-bold text-[10px] md:text-xs tracking-wide">{m.name}</span>
+2161:              ))}
+2163:          )}
+2165:          {/* Textbook Association Section */}
+2172:                      <div className={`w-6 h-6 rounded-full border flex items-center justify-center transition-all duration-300 ${associateTextbook ? 'bg-white border-white shadow-[0_0_15px_rgba(255,255,255,0.4)]' : 'border-white/20 group-hover:border-white/50 bg-black/40'}`}>
+2173:                        {associateTextbook && <Check className="w-3.5 h-3.5 text-black" />}
+2178:                        checked={associateTextbook} 
+2179:                        onChange={(e) => setAssociateTextbook(e.target.checked)} 
+2182:                        {t.associateTextbook}
+2194:                            <div key={group.id} className="flex flex-col gap-2 p-3 rounded-2xl bg-white/5 border border-white/10">
+2198:                                  {group.name}
+2204:                                    } else {
+2208:                                      });
+2210:                                    }
+2211:                                  }}
+2214:                                  {allGroupSelected ? (language === 'zh' ? '取消全选' : 'Deselect All') : (language === 'zh' ? '全选' : 'Select All')}
+2222:                                      key={book.id}
+2226:                                        } else {
+2228:                                        }
+2229:                                      }}
+2234:                                      }`}
+2236:                                      {book.name}
+2239:                                })}
+2243:                        })}
+2245:                        {/* Render books without a group */}
+2255:                                    key={book.id}
+2259:                                      } else {
+2261:                                      }
+2262:                                    }}
+2267:                                    }`}
+2269:                                    {book.name}
+2272:                              })}
+2275:                        })()}
+2277:                    )}
+2279:                )}
+2284:                  onClick={() => setShowTextbookManager(true)}
+2288:                  {t.manageTextbooks}
+2290:              )}
+2292:          )}
+2295:          <div className={appMode === 'grapher' ? 'block flex-1 flex flex-col h-full' : 'hidden'}>
+2297:              initial={{ opacity: 0, y: -20 }}
+2298:              animate={{ opacity: 1, y: 0 }}
+2299:              transition={{ duration: 0.3 }}
+2303:                {/* Right Panel: Graph */}
+2307:                      key={clearKey}
+2308:                      functions={graphFunctions.filter(f => f.visible).map(f => ({ expression: f.expression, color: f.color }))} 
+2309:                      parameters={graphParameters}
+2310:                      onSave={handleSaveGraph}
+2315:                {/* Left Panel: Controls */}
+2317:                  {/* Function List */}
+2319:                    <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4">{language === 'zh' ? '函数列表' : 'Functions'}</h3>
+2330:                            }
+2331:                          });
+2332:                        } catch(e) {}
+2335:                          <div key={f.id} className="group p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-white/20 transition-all space-y-4">
+2340:                                    className={`w-3 h-3 rounded-full ${f.visible ? '' : 'opacity-30'}`}
+2341:                                    style={{ backgroundColor: f.color }}
+2345:                                  <InlineMath math={toGraphLatex(f.expression)} />
+2350:                                  onClick={() => setGraphFunctions(graphFunctions.map(func => func.id === f.id ? { ...func, visible: !func.visible } : func))}
+2351:                                  className={`p-2 rounded-xl transition-all border ${f.visible ? 'bg-white/5 text-zinc-400 hover:text-white border-white/5' : 'bg-white/10 text-white border-white/20'}`}
+2352:                                  title={language === 'zh' ? (f.visible ? '隐藏' : '显示') : (f.visible ? 'Hide' : 'Show')}
+2354:                                  {f.visible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+2357:                                  onClick={() => setGraphShowColorPicker(graphShowColorPicker === f.id ? null : f.id)}
+2358:                                  className={`p-2 rounded-xl transition-all border ${graphShowColorPicker === f.id ? 'bg-white text-black border-white' : 'bg-white/5 text-zinc-400 hover:text-white border-white/5'}`}
+2359:                                  style={{ color: graphShowColorPicker === f.id ? undefined : f.color }}
+2360:                                  title={language === 'zh' ? '颜色' : 'Color'}
+2365:                                  onClick={() => { setGraphInputValue(f.expression); setGraphEditingId(f.id); setGraphActiveTab('manual'); }}
+2367:                                  title={language === 'zh' ? '编辑' : 'Edit'}
+2372:                                  onClick={() => setGraphFunctions(graphFunctions.filter(func => func.id !== f.id))}
+2374:                                  title={language === 'zh' ? '删除' : 'Delete'}
+2384:                                  initial={{ opacity: 0, height: 0 }}
+2385:                                  animate={{ opacity: 1, height: 'auto' }}
+2386:                                  exit={{ opacity: 0, height: 0 }}
+2392:                                        key={color}
+2394:                                          setGraphFunctions(graphFunctions.map(func => func.id === f.id ? { ...func, color } : func));
+2396:                                        }}
+2397:                                        className={`w-6 h-6 rounded-full border-2 transition-all ${f.color === color ? 'scale-110 border-white shadow-[0_0_15px_rgba(255,255,255,0.3)]' : 'border-transparent opacity-60 hover:opacity-100 hover:scale-110'}`}
+2398:                                        style={{ backgroundColor: color }}
+2400:                                    ))}
+2403:                              )}
+2412:                                    <div key={p.name} className="space-y-2">
+2414:                                        <span className="text-[10px] font-mono text-zinc-400 tracking-widest">{p.name} = {p.value.toFixed(2)}</span>
+2416:                                          const next = { ...graphParameters };
+2419:                                        }} className="p-1 hover:bg-white/10 rounded text-zinc-500 hover:text-white">
+2425:                                        min={p.min} 
+2426:                                        max={p.max} 
+2427:                                        step={p.step} 
+2428:                                        value={p.value ?? 0}
+2429:                                        onChange={(e) => setGraphParameters({ ...graphParameters, [p.name]: { ...p, value: parseFloat(e.target.value) } })}
+2434:                                })}
+2436:                            )}
+2439:                      })}
+2443:                          <p className="text-xs">{language === 'zh' ? '暂无函数' : 'No functions yet'}</p>
+2445:                      )}
+2452:                        onClick={() => setGraphActiveTab('manual')}
+2453:                        className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold transition-all ${graphActiveTab === 'manual' ? 'bg-white text-black shadow-lg' : 'text-zinc-500 hover:bg-white/5'}`}
+2456:                        {language === 'zh' ? '手动输入' : 'Manual'}
+2459:                        onClick={() => setGraphActiveTab('photo')}
+2460:                        className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold transition-all ${graphActiveTab === 'photo' ? 'bg-white text-black shadow-lg' : 'text-zinc-500 hover:bg-white/5'}`}
+2463:                        {language === 'zh' ? '拍照识别' : 'Photo Scan'}
+2471:                            ref={graphInputRef}
+2474:                            value={graphInputValue || ''}
+2475:                            onChange={(e) => setGraphInputValue(e.target.value)}
+2476:                            onKeyDown={(e) => e.key === 'Enter' && addGraphFunction(graphInputValue)}
+2477:                            placeholder={language === 'zh' ? '输入函数, 如: y = x^2' : 'Enter function, e.g., y = x^2'}
+2481:                            onClick={() => addGraphFunction(graphInputValue)}
+2488:                          onKeyClick={insertAtGraphCursor}
+2489:                          onDelete={deleteAtGraphCursor}
+2490:                          onClear={() => setGraphInputValue('')}
+2491:                          onMoveCursor={moveGraphCursor}
+2496:                        {/* Model Selection */}
+2499:                            {language === 'zh' ? '识别模型与推理等级' : 'Model & Thinking Level'}
+2503:                              onClick={() => setGraphScanMode('gemini-3.1-flash-lite-low')}
+2508:                              }`}
+2511:                              <span className={`text-[10px] ${graphScanMode === 'gemini-3.1-flash-lite-low' ? 'text-zinc-600' : 'text-zinc-500'}`}>
+2516:                              onClick={() => setGraphScanMode('gemini-3-flash-high')}
+2521:                              }`}
+2524:                              <span className={`text-[10px] ${graphScanMode === 'gemini-3-flash-high' ? 'text-zinc-600' : 'text-zinc-500'}`}>
+2529:                              onClick={() => setGraphScanMode('gemini-3.1-pro-preview')}
+2534:                              }`}
+2537:                              <span className={`text-[10px] ${graphScanMode === 'gemini-3.1-pro-preview' ? 'text-zinc-600' : 'text-zinc-500'}`}>
+2545:                          onClick={() => graphFileInputRef.current?.click()}
+2548:                          <input type="file" ref={graphFileInputRef} onChange={handleGraphFileUpload} accept="image/*" className="hidden" />
+2552:                              <p className="text-sm font-medium text-zinc-300">{language === 'zh' ? '正在识别函数...' : 'Scanning functions...'}</p>
+2559:                              <p className="text-sm font-medium text-zinc-300">{language === 'zh' ? '点击上传或拖拽图片' : 'Click to upload or drag image'}</p>
+2561:                          )}
+2566:                            onClick={regenerateGraphFunctions}
+2570:                            {language === 'zh' ? '重新识别当前图片' : 'Regenerate from Current Image'}
+2572:                        )}
+2577:                              <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest">{language === 'zh' ? '识别结果' : 'Scanned Results'}</p>
+2583:                                    } else {
+2585:                                    }
+2586:                                  }}
+2589:                                  {language === 'zh' ? (graphSelectedIndices.size === graphScannedResults.length ? '取消全选' : '全选') : (graphSelectedIndices.size === graphScannedResults.length ? 'Deselect All' : 'Select All')}
+2595:                                    });
+2597:                                  }}
+2600:                                  {language === 'zh' ? '添加选中' : 'Add Selected'}
+2607:                                  key={i} 
+2612:                                  }}
+2613:                                  className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${graphSelectedIndices.has(i) ? 'bg-white/10 border-white/30' : 'bg-black/20 border-white/5 opacity-50'}`}
+2616:                                    <InlineMath math={toGraphLatex(res)} />
+2618:                                  {graphSelectedIndices.has(i) && <Check className="w-4 h-4 text-white shrink-0" />}
+2620:                              ))}
+2623:                        )}
+2625:                    )}
+2632:          <div className={appMode === 'material-assistant' ? 'block flex-1 flex flex-col' : 'hidden'}>
+2634:              initial={{ opacity: 0, y: -20 }}
+2635:              animate={{ opacity: 1, y: 0 }}
+2636:              transition={{ duration: 0.3 }}
+2641:                  key={clearKey}
+2642:                  lang={language} 
+2643:                  materials={materials} 
+2644:                  groups={materialGroups}
+2645:                  onManageMaterials={() => setShowMaterialManager(true)}
+2646:                  onSaveHistory={saveHistory}
+2647:                  initialData={materialAssistantData}
+2648:                  isAdmin={isAdmin}
+2654:          <div className={appMode === 'essay-feedback' ? 'block flex-1 flex flex-col' : 'hidden'}>
+2656:              initial={{ opacity: 0, y: -20 }}
+2657:              animate={{ opacity: 1, y: 0 }}
+2658:              transition={{ duration: 0.3 }}
+2663:                  key={clearKey}
+2664:                  lang={language} 
+2665:                  onSaveHistory={saveHistory}
+2666:                  initialData={essayFeedbackData}
+2667:                  materials={materials}
+2668:                  groups={materialGroups}
+2669:                  onManageMaterials={() => setShowMaterialManager(true)}
+2670:                  selectedModel={selectedModel}
+2671:                  isAdmin={isAdmin}
+2677:          <div className={appMode === 'audio-tutor' ? 'block flex-1 flex flex-col' : 'hidden'}>
+2679:              initial={{ opacity: 0, y: -20 }}
+2680:              animate={{ opacity: 1, y: 0 }}
+2681:              transition={{ duration: 0.3 }}
+2685:                key={clearKey}
+2686:                files={files} 
+2687:                setFiles={setFiles} 
+2688:                lang={language} 
+2689:                associateTextbook={associateTextbook}
+2690:                selectedTextbookIds={selectedTextbookIds}
+2691:                textbooks={textbooks}
+2692:                onSaveHistory={saveHistory}
+2697:          <div className={appMode === 'zhang-jingyang' ? 'block flex-1 flex flex-col' : 'hidden'}>
+2699:              initial={{ opacity: 0, y: -20 }}
+2700:              animate={{ opacity: 1, y: 0 }}
+2701:              transition={{ duration: 0.3 }}
+2706:                  key={clearKey}
+2707:                  lang={language} 
+2708:                  onSaveHistory={saveHistory} 
+2709:                  initialData={zhangJingyangData}
+2715:          <div className={appMode === 'organic-chemistry' ? 'block flex-1 flex flex-col' : 'hidden'}>
+2717:              initial={{ opacity: 0, y: -20 }}
+2718:              animate={{ opacity: 1, y: 0 }}
+2719:              transition={{ duration: 0.3 }}
+2724:                  key={clearKey}
+2725:                  lang={language} 
+2726:                  model={selectedModel} 
+2727:                  initialData={organicChemistryData}
+2728:                  onSaveHistory={saveHistory}
+2734:          <div className={appMode === 'reading-coach' ? 'block flex-1 flex flex-col' : 'hidden'}>
+2736:              initial={{ opacity: 0, y: -20 }}
+2737:              animate={{ opacity: 1, y: 0 }}
+2738:              transition={{ duration: 0.3 }}
+2742:                <ReadingCoach key={clearKey} lang={language} onSaveHistory={saveHistory} />
+2747:          <div className={appMode === 'extractor' ? 'block flex-1 flex flex-col' : 'hidden'}>
+2752:                  initial={{ opacity: 0, y: -20 }}
+2753:                  animate={{ opacity: 1, y: 0 }}
+2754:                  exit={{ opacity: 0, y: 20 }}
+2755:                  transition={{ duration: 0.3 }}
+2758:                  {/* Model & Upload Section */}
+2762:                      {/* Hidden Inputs */}
+2763:                      <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" multiple className="hidden" />
+2764:                      <input type="file" ref={cameraInputRef} onChange={handleFileChange} accept="image/*" capture="environment" multiple className="hidden" />
+2769:                            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+2770:                            onDragLeave={() => setIsDragging(false)}
+2771:                            onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files) processFiles(e.dataTransfer.files); }}
+2772:                            onClick={() => fileInputRef.current?.click()}
+2775:                              ${isDragging ? 'bg-white text-black scale-[0.99] shadow-[0_0_50px_rgba(255,255,255,0.5)]' : 'bg-black/20 hover:bg-black/40 hover:border-white/30'}
+2776:                            `}
+2779:                              <div className={`p-2.5 md:p-4 rounded-full transition-all duration-500 ${isDragging ? 'bg-black text-white' : 'bg-white/5 text-zinc-400 group-hover:bg-white group-hover:text-black shadow-[0_0_20px_rgba(255,255,255,0.1)]'}`}>
+2782:                              <p className={`text-[10px] md:text-sm font-medium transition-colors ${isDragging ? 'text-black' : 'text-zinc-300'}`}>{t.upload}</p>
+2787:                            onClick={() => cameraInputRef.current?.click()}
+2794:                              <p className="text-zinc-300 text-[10px] md:text-sm font-medium">{t.camera}</p>
+2802:                              <div key={idx} className="relative w-24 md:w-28 aspect-[3/4] bg-black/50 rounded-lg overflow-hidden border border-white/10 group shrink-0 shadow-xl">
+2803:                                <img src={url} alt={`Preview ${idx}`} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+2804:                                <button onClick={() => removeFile(idx)} className="absolute top-1 right-1 p-1 bg-black/60 backdrop-blur-md text-zinc-300 rounded-full hover:bg-red-500 hover:text-white transition-all shadow-lg">
+2808:                            ))}
+2810:                              onClick={() => fileInputRef.current?.click()}
+2814:                              <span className="text-[8px] font-medium">{t.add}</span>
+2821:                              <span className="font-medium truncate text-[10px]">{t.selected} {files.length} {language === 'zh' ? '张' : 'images'}</span>
+2826:                                onClick={clearFiles}
+2829:                                {t.clear}
+2832:                                onClick={extractQuestions}
+2833:                                disabled={loading}
+2836:                                {loading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {t.parsing}</> : <><Upload className="w-3.5 h-3.5" /> {t.start}</>}
+2844:                                  <p className="break-all">{error}</p>
+2847:                                  onClick={extractQuestions}
+2850:                                  {t.retry}
+2853:                            )}
+2856:                      )}
+2860:                  {/* Preview List Section */}
+2864:                        initial={{ opacity: 0, y: 20 }}
+2865:                        animate={{ opacity: 1, y: 0 }}
+2869:                          <h2 className="text-xl font-bold text-white">{t.preview}</h2>
+2872:                              onClick={extractQuestions}
+2873:                              disabled={loading}
+2876:                              {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+2877:                              {language === 'zh' ? '重新生成' : 'Regenerate'}
+2880:                              {questions.length} {t.ready}
+2888:                              key={idx} 
+2889:                              data={q} 
+2890:                              index={idx} 
+2891:                              onClick={() => setSelectedIdx(idx)} 
+2892:                              lang={language}
+2894:                          ))}
+2897:                    )}
+2903:                  initial={{ opacity: 0, y: -20 }}
+2904:                  animate={{ opacity: 1, y: 0 }}
+2905:                  exit={{ opacity: 0, y: 20 }}
+2906:                  transition={{ duration: 0.3 }}
+2910:                    data={questions[selectedIdx]} 
+2911:                    onBack={() => setSelectedIdx(null)} 
+2912:                    onNext={() => setSelectedIdx(prev => prev !== null ? prev + 1 : null)}
+2913:                    onPrev={() => setSelectedIdx(prev => prev !== null ? prev - 1 : null)}
+2914:                    hasNext={selectedIdx < questions.length - 1}
+2915:                    hasPrev={selectedIdx > 0}
+2916:                    model={selectedModel}
+2917:                    setModel={setSelectedModel}
+2918:                    lang={language}
+2919:                    textbooks={textbooks}
+2920:                    groups={textbookGroups}
+2921:                    allQuestions={questions}
+2922:                    currentIndex={selectedIdx}
+2923:                    onSelectQuestion={setSelectedIdx}
+2926:              )}
+2934:          onClose={() => setShowTextbookManager(false)} 
+2935:          lang={language} 
+2936:          isAdmin={isAdmin}
+2938:      )}
+2942:          onClose={() => setShowMaterialManager(false)} 
+2943:          lang={language} 
+2945:          isAdmin={isAdmin}
+2947:      )}
+2950:        isOpen={isHistoryOpen} 
+2951:        onClose={() => setIsHistoryOpen(false)} 
+2952:        onSelectRecord={handleSelectHistoryRecord}
+2953:        lang={language}
+2954:        uid={user?.uid}
+2958:        isOpen={isUserGuideOpen}
+2959:        onClose={() => setIsUserGuideOpen(false)}
+2960:        lang={language}
+2964:}

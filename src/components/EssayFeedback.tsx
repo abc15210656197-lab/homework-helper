@@ -1252,7 +1252,7 @@ ${userMessage}
                       </AnimatePresence>
                     </div>
                   )}
-                  {onManageMaterials && isAdmin && (
+                  {onManageMaterials && (
                     <button 
                       onClick={onManageMaterials}
                       className="bg-white/10 hover:bg-white/20 text-white text-[10px] rounded-full px-3 py-1.5 transition-colors"

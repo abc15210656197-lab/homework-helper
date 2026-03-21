@@ -50,6 +50,21 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["name"]
+    },
+    "ClassMemorial": {
+      "title": "Class Memorial Settings",
+      "description": "Settings for the class memorial, including photos.",
+      "type": "object",
+      "properties": {
+        "photos": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of photo URLs for the memorial."
+        },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["photos"]
     }
   },
   "firestore": {
@@ -72,6 +87,10 @@
     "/material_groups/{groupId}": {
       "schema": "TextbookGroup",
       "description": "Collection of material groups."
+    },
+    "/settings/class_memorial": {
+      "schema": "ClassMemorial",
+      "description": "Global settings document for class memorial."
     }
   }
 }

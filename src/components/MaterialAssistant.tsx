@@ -462,15 +462,13 @@ Requirements:
                   </AnimatePresence>
                 </div>
               )}
-              {isAdmin && (
-                <button 
-                  onClick={onManageMaterials}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl text-xs text-zinc-300 hover:text-white transition-all active:scale-95"
-                >
-                  <Book className="w-3.5 h-3.5" />
-                  {lang === 'zh' ? '管理素材' : 'Manage Materials'}
-                </button>
-              )}
+              <button 
+                onClick={onManageMaterials}
+                className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl text-xs text-zinc-300 hover:text-white transition-all active:scale-95"
+              >
+                <Book className="w-3.5 h-3.5" />
+                {lang === 'zh' ? '管理素材' : 'Manage Materials'}
+              </button>
             </div>
           </div>
           {materials.length === 0 ? (

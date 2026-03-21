@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, serverTimestamp, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import { supabase } from '../supabase';
 import { Book, Upload, Trash2, Loader2, AlertCircle, X, Link as LinkIcon, FileText, Folder, Plus, Check, FolderInput } from 'lucide-react';
@@ -19,7 +19,7 @@ export interface Textbook {
   groupId?: string;
 }
 
-export function TextbookManager({ onClose, lang, type = 'textbook', isAdmin = false }: { onClose: () => void, lang: 'zh' | 'en', type?: 'textbook' | 'material', isAdmin?: boolean }) {
+export function TextbookManager({ onClose, lang, type = 'textbook', isAdmin = false, uid }: { onClose: () => void, lang: 'zh' | 'en', type?: 'textbook' | 'material', isAdmin?: boolean, uid?: string }) {
   const [textbooks, setTextbooks] = useState<Textbook[]>([]);
   const [groups, setGroups] = useState<TextbookGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,10 +53,14 @@ export function TextbookManager({ onClose, lang, type = 'textbook', isAdmin = fa
   const loadGroups = async () => {
     try {
       if (!db) throw new Error('Firebase not configured');
-      const querySnapshot = await getDocs(collection(db, groupsCollectionName));
+      let q = collection(db, groupsCollectionName) as any;
+      if (type === 'material' && uid) {
+        q = query(q, where('uid', '==', uid));
+      }
+      const querySnapshot = await getDocs(q);
       const loadedGroups: TextbookGroup[] = [];
       querySnapshot.forEach((doc) => {
-        loadedGroups.push({ id: doc.id, ...doc.data() } as TextbookGroup);
+        loadedGroups.push({ id: doc.id, ...(doc.data() as any) } as TextbookGroup);
       });
 
       // Merge with local storage if Firestore is empty
@@ -65,7 +69,11 @@ export function TextbookManager({ onClose, lang, type = 'textbook', isAdmin = fa
         if (localGroups) {
           try {
             const parsed = JSON.parse(localGroups);
-            loadedGroups.push(...parsed);
+            if (type === 'material' && uid) {
+              loadedGroups.push(...(parsed as any[]).filter((g: any) => g.uid === uid));
+            } else {
+              loadedGroups.push(...(parsed as any[]));
+            }
           } catch (e) {
             // ignore
           }
@@ -81,7 +89,12 @@ export function TextbookManager({ onClose, lang, type = 'textbook', isAdmin = fa
       const localGroups = localStorage.getItem(groupsStorageKey);
       if (localGroups) {
         try {
-          setGroups(JSON.parse(localGroups));
+          const parsed = JSON.parse(localGroups);
+          if (type === 'material' && uid) {
+            setGroups(parsed.filter((g: any) => g.uid === uid));
+          } else {
+            setGroups(parsed);
+          }
         } catch (e) {
           setGroups([]);
         }
@@ -92,10 +105,14 @@ export function TextbookManager({ onClose, lang, type = 'textbook', isAdmin = fa
   const loadTextbooks = async () => {
     try {
       if (!db) throw new Error('Firebase not configured');
-      const querySnapshot = await getDocs(collection(db, collectionName));
+      let q = collection(db, collectionName) as any;
+      if (type === 'material' && uid) {
+        q = query(q, where('uid', '==', uid));
+      }
+      const querySnapshot = await getDocs(q);
       const books: Textbook[] = [];
       querySnapshot.forEach((doc) => {
-        books.push({ id: doc.id, ...doc.data() } as Textbook);
+        books.push({ id: doc.id, ...(doc.data() as any) } as Textbook);
       });
 
       // Merge with local storage if Firestore is empty
@@ -104,7 +121,11 @@ export function TextbookManager({ onClose, lang, type = 'textbook', isAdmin = fa
         if (localBooks) {
           try {
             const parsed = JSON.parse(localBooks);
-            books.push(...parsed);
+            if (type === 'material' && uid) {
+              books.push(...(parsed as any[]).filter((b: any) => b.uid === uid));
+            } else {
+              books.push(...(parsed as any[]));
+            }
           } catch (e) {
             // ignore
           }
@@ -122,8 +143,12 @@ export function TextbookManager({ onClose, lang, type = 'textbook', isAdmin = fa
       if (localBooks) {
         try {
           const parsed = JSON.parse(localBooks);
+          let filtered = parsed;
+          if (type === 'material' && uid) {
+            filtered = parsed.filter((b: any) => b.uid === uid);
+          }
           // Sort local books by simulated createdAt
-          setTextbooks(parsed.sort((a: any, b: any) => (b.createdAt?.seconds || b.createdAt || 0) - (a.createdAt?.seconds || a.createdAt || 0)));
+          setTextbooks(filtered.sort((a: any, b: any) => (b.createdAt?.seconds || b.createdAt || 0) - (a.createdAt?.seconds || a.createdAt || 0)));
         } catch (e) {
           setTextbooks([]);
         }
@@ -147,19 +172,26 @@ export function TextbookManager({ onClose, lang, type = 'textbook', isAdmin = fa
     
     try {
       if (db) {
-        await addDoc(collection(db, groupsCollectionName), {
+        const groupData: any = {
           name: name,
           createdAt: serverTimestamp()
-        });
+        };
+        if (type === 'material' && uid) {
+          groupData.uid = uid;
+        }
+        await addDoc(collection(db, groupsCollectionName), groupData);
       } else {
         throw new Error('Firebase not configured');
       }
     } catch (err) {
-      const newGroup = {
+      const newGroup: any = {
         id: `local-group-${Date.now()}`,
         name: name,
         createdAt: Date.now()
       };
+      if (type === 'material' && uid) {
+        newGroup.uid = uid;
+      }
       const localGroups = JSON.parse(localStorage.getItem(groupsStorageKey) || '[]');
       localGroups.push(newGroup);
       localStorage.setItem(groupsStorageKey, JSON.stringify(localGroups));
@@ -292,21 +324,28 @@ export function TextbookManager({ onClose, lang, type = 'textbook', isAdmin = fa
 
       try {
         if (!db) throw new Error('Firebase not configured');
-        await addDoc(collection(db, collectionName), {
+        const bookData: any = {
           name: file.name,
           url: publicUrl,
           fileId: `supabase-${fileId}`,
           createdAt: serverTimestamp()
-        });
+        };
+        if (type === 'material' && uid) {
+          bookData.uid = uid;
+        }
+        await addDoc(collection(db, collectionName), bookData);
       } catch (dbErr) {
         console.warn("Firebase save failed, saving to localStorage:", dbErr);
-        const newBook = {
+        const newBook: any = {
           id: `local-${Date.now()}`,
           name: file.name,
           url: publicUrl,
           fileId: `supabase-${fileId}`,
           createdAt: Date.now()
         };
+        if (type === 'material' && uid) {
+          newBook.uid = uid;
+        }
         const localBooks = JSON.parse(localStorage.getItem(storageKey) || '[]');
         localBooks.push(newBook);
         localStorage.setItem(storageKey, JSON.stringify(localBooks));

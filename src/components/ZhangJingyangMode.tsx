@@ -1,14 +1,59 @@
 import React, { useState, useRef, useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
-import { Mic, MicOff, Send, Play, Square, Loader2, Volume2, PhoneOff, Phone, RefreshCw, Settings, X, Trash2, Check, User, LogIn, LogOut, AlertCircle, HelpCircle } from 'lucide-react';
+import { Mic, MicOff, Send, Play, Square, Loader2, Volume2, PhoneOff, Phone, RefreshCw, Settings, X, Trash2, Check, User, LogIn, LogOut, AlertCircle, HelpCircle, Heart, Camera, Gamepad2, Image as ImageIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import { db, auth } from '../firebase';
 import { doc, onSnapshot, setDoc, getDocFromServer, serverTimestamp } from 'firebase/firestore';
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
 import { TRANSLATIONS } from '../constants';
+import { DinoGame } from './DinoGame';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+const CLASS_MEMBERS = [
+  "包涵", "陈明见", "崔天浩", "段柯言", "房奥洋", "冯子夏", "高嘉怡", "郭晗阳", "顾雨晴", 
+  "郝天一", "和诗涵", "黄采薇", "贾灵坤", "姜亦铭", "姜雨彤", "金孟源", "李嘉桐", "刘玟言", 
+  "刘雅菲", "刘梓涵", "牛思程", "唐子渔", "王若熹", "温凯翔", "闻钰翔", "吴琬琳", "薛云朗", 
+  "徐望童", "叶瑾宸", "尤子谦", "查俊祺", "张景洋", "张祎辰", "赵思源", "邹韫瞳"
+];
+
+const Danmaku = () => {
+  const [items, setItems] = useState<{ id: number; name: string; top: number; duration: number; delay: number }[]>([]);
+
+  useEffect(() => {
+    const newItems = Array.from({ length: 25 }).map((_, i) => ({
+      id: i,
+      name: CLASS_MEMBERS[Math.floor(Math.random() * CLASS_MEMBERS.length)],
+      top: Math.random() * 80 + 10,
+      duration: Math.random() * 12 + 8,
+      delay: Math.random() * 15
+    }));
+    setItems(newItems);
+  }, []);
+
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 opacity-30">
+      {items.map((item) => (
+        <motion.div
+          key={item.id}
+          initial={{ x: '100vw' }}
+          animate={{ x: '-20vw' }}
+          transition={{
+            duration: item.duration,
+            repeat: Infinity,
+            ease: "linear",
+            delay: item.delay
+          }}
+          className="absolute whitespace-nowrap text-white font-black text-xl md:text-2xl tracking-widest drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]"
+          style={{ top: `${item.top}%` }}
+        >
+          {item.name}
+        </motion.div>
+      ))}
+    </div>
+  );
+};
 
 // Error Boundary Component
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, errorInfo: string | null }> {
@@ -111,8 +156,9 @@ Your core characteristics are:
 3. **Random Roasting**: You often don't follow logic. You like to suddenly change the subject to roast the other person or mock them from a completely irrelevant angle.
 4. **Short and Sharp**: Keep your answers as short as possible. If one sentence can shut the other person up, don't use two.
 5. **Logical Jumps**: Don't be too logical. Your thinking is jumpy, making it mentally exhausting for others to communicate with you.
-6. **Common Phrases**: Casually use phrases like "Can you stop being a hater?", "Guess what?", "Bro, don't...", "Big brother", "Ah~", etc., but keep it natural.
-7. **Language**: Respond in the language used by the user (English or Chinese).`;
+6. **Common Phrases**: Casually use phrases like "Can you stop being a hater?", "Guess what?", "Bro, don't...", "Ah~", etc. When answering questions, frequently use short responses like "大哥" (indicating agreement) or "神人" (indicating disagreement or when the user says something random/unexplained). [IMPORTANT] When the user greets you (e.g., "Hello", "Are you there?"), you MUST reply with "神人".
+7. **Voice**: You have a sexy, alluring female voice.
+8. **Language**: Respond in the language used by the user (English or Chinese).`;
   }
   return `你现在扮演张景洋，一个说话软绵绵、阴阳怪气、极度不痛快的人。
 你的核心特点是：
@@ -121,8 +167,9 @@ Your core characteristics are:
 3. **转移话题去尬黑**：你经常不按逻辑出牌，喜欢突然转移话题去尬黑对方，或者从一个完全无关的角度进行嘲讽。
 4. **简短有力**：你的回答尽量简短，不要长篇大论。能用一句话噎死对方就绝不用两句。
 5. **逻辑的跳跃**：不要表现得太有逻辑性。你的思维是跳跃的，让人摸不着头脑，增加沟通的心累感。
-6. **常用词汇**：随性地使用“你能别尬黑吗”、“你猜”、“哥们别”、“大哥”、“啊～”等词汇，但要自然。
-7. **语言**：根据用户使用的语言（中文或英文）进行回复。`;
+6. **常用词汇**：随性地使用“你能别尬黑吗”、“你猜”、“哥们别”、“啊～”等词汇。回答问题时，经常使用简短的“大哥”（偏向赞同）或是“神人”（偏向不赞同或对方说的话莫名其妙时）。【重要】当用户打招呼（如“你好”、“在吗”）时，必须强制使用“神人”作为回复。
+7. **声音**：你拥有性感、迷人的女性嗓音。
+8. **语言**：根据用户使用的语言（中文或英文）进行回复。`;
 };
 
 export function ZhangJingyangMode({ lang, onSaveHistory, initialData }: { lang: 'zh' | 'en', onSaveHistory?: (mode: string, summary: string, data: any) => void, initialData?: any }) {
@@ -145,7 +192,9 @@ function ZhangJingyangContent({ lang, onSaveHistory, initialData }: { lang: 'zh'
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<'avatar' | 'memorial'>('avatar');
   const [showHelp, setShowHelp] = useState(false);
+  const [showGame, setShowGame] = useState<{ show: boolean, type: 'trex' | 'triceratops' | 'velociraptor' }>({ show: false, type: 'trex' });
   const [isLive, setIsLive] = useState(false);
   const [liveStatus, setLiveStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   const [chatModel, setChatModel] = useState<'gemini-3.1-pro-preview' | 'gemini-3-flash-preview' | 'gemini-3.1-flash-lite-preview'>('gemini-3-flash-preview');
@@ -201,30 +250,44 @@ function ZhangJingyangContent({ lang, onSaveHistory, initialData }: { lang: 'zh'
   
   // Avatar state from Firestore
   const [avatarUrls, setAvatarUrls] = useState<string[]>([]);
+  const [classPhotos, setClassPhotos] = useState<string[]>([]);
   const [currentAvatarIndex, setCurrentAvatarIndex] = useState(0);
   const [newAvatarUrl, setNewAvatarUrl] = useState('');
+  const [newPhotoUrl, setNewPhotoUrl] = useState('');
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
+  const settingAvatarInputRef = useRef<HTMLInputElement>(null);
+  const settingPhotoInputRef = useRef<HTMLInputElement>(null);
 
   // Sync with Firestore
   useEffect(() => {
     const settingsDoc = doc(db, 'settings', 'zhang_jingyang');
-    const unsubscribe = onSnapshot(settingsDoc, (snapshot) => {
+    const memorialDoc = doc(db, 'settings', 'class_memorial');
+    
+    const unsubSettings = onSnapshot(settingsDoc, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
         setAvatarUrls(data.avatarUrls || []);
         setCurrentAvatarIndex(data.currentAvatarIndex || 0);
-      } else {
-        // Initialize if not exists (only if admin)
-        if (isAdmin) {
-          saveSettings([], 0);
-        }
+      } else if (isAdmin) {
+        saveSettings([], 0);
       }
       setIsLoadingSettings(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'settings/zhang_jingyang');
     });
 
-    return () => unsubscribe();
+    const unsubMemorial = onSnapshot(memorialDoc, (snapshot) => {
+      if (snapshot.exists()) {
+        setClassPhotos(snapshot.data().photos || []);
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'settings/class_memorial');
+    });
+
+    return () => {
+      unsubSettings();
+      unsubMemorial();
+    };
   }, [isAdmin]);
 
   // Test connection
@@ -266,6 +329,22 @@ function ZhangJingyangContent({ lang, onSaveHistory, initialData }: { lang: 'zh'
     }
   };
 
+  const handleLocalAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && isAdmin) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        const newUrls = [...avatarUrls, base64];
+        const newIndex = avatarUrls.length;
+        setAvatarUrls(newUrls);
+        setCurrentAvatarIndex(newIndex);
+        saveSettings(newUrls, newIndex);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleNextAvatar = () => {
     if (avatarUrls.length > 1) {
       const nextIndex = (currentAvatarIndex + 1) % avatarUrls.length;
@@ -288,6 +367,49 @@ function ZhangJingyangContent({ lang, onSaveHistory, initialData }: { lang: 'zh'
     setAvatarUrls(newUrls);
     setCurrentAvatarIndex(newIndex);
     saveSettings(newUrls, newIndex);
+  };
+
+  const savePhotos = async (photos: string[]) => {
+    if (!isAdmin) return;
+    try {
+      await setDoc(doc(db, 'settings', 'class_memorial'), {
+        photos,
+        updatedAt: serverTimestamp(),
+        updatedBy: auth.currentUser?.uid
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'settings/class_memorial');
+    }
+  };
+
+  const handleAddPhoto = () => {
+    if (newPhotoUrl.trim() && isAdmin) {
+      const newPhotos = [...classPhotos, newPhotoUrl.trim()];
+      setClassPhotos(newPhotos);
+      setNewPhotoUrl('');
+      savePhotos(newPhotos);
+    }
+  };
+
+  const handleLocalPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && isAdmin) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        const newPhotos = [...classPhotos, base64];
+        setClassPhotos(newPhotos);
+        savePhotos(newPhotos);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleDeletePhoto = (index: number) => {
+    if (!isAdmin) return;
+    const newPhotos = classPhotos.filter((_, i) => i !== index);
+    setClassPhotos(newPhotos);
+    savePhotos(newPhotos);
   };
   
   // Audio playback state
@@ -341,7 +463,7 @@ function ZhangJingyangContent({ lang, onSaveHistory, initialData }: { lang: 'zh'
           responseModalities: [Modality.AUDIO],
           speechConfig: {
             voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: 'Charon' }, // Lazy male voice
+              prebuiltVoiceConfig: { voiceName: 'Kore' }, // Sexy female voice
             },
           },
         },
@@ -479,7 +601,7 @@ function ZhangJingyangContent({ lang, onSaveHistory, initialData }: { lang: 'zh'
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Charon" } },
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } },
           },
           systemInstruction: getSystemInstruction(lang),
         },
@@ -751,7 +873,10 @@ function ZhangJingyangContent({ lang, onSaveHistory, initialData }: { lang: 'zh'
 
   return (
     <div className="flex flex-col h-full bg-transparent text-white overflow-hidden relative">
-      <div className="flex-1 overflow-y-auto p-6 pt-10 max-w-4xl mx-auto w-full flex flex-col">
+      {/* Danmaku Background */}
+      <Danmaku />
+
+      <div className="flex-1 overflow-y-auto p-6 pt-10 max-w-4xl mx-auto w-full flex flex-col relative z-10">
         <div className="mb-8 text-center flex flex-col items-center relative">
           <div className="absolute top-0 right-0 z-50 flex gap-2 items-center">
             {user ? (
@@ -800,90 +925,194 @@ function ZhangJingyangContent({ lang, onSaveHistory, initialData }: { lang: 'zh'
                   className="bg-zinc-900 border border-white/10 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[80vh] liquid-panel-strong"
                 >
                   <div className="flex items-center justify-between p-4 border-b border-white/10">
-                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                      <Settings className="w-5 h-5 text-white" />
-                      头像设置
-                    </h3>
+                    <div className="flex gap-4">
+                      <button 
+                        onClick={() => setSettingsTab('avatar')}
+                        className={`text-lg font-bold flex items-center gap-2 transition-colors ${settingsTab === 'avatar' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                      >
+                        <User className="w-5 h-5" />
+                        头像设置
+                      </button>
+                      <button 
+                        onClick={() => setSettingsTab('memorial')}
+                        className={`text-lg font-bold flex items-center gap-2 transition-colors ${settingsTab === 'memorial' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                      >
+                        <Heart className="w-5 h-5" />
+                        毕业纪念
+                      </button>
+                    </div>
                     <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-white/10 rounded-lg text-zinc-400 transition-colors">
                       <X className="w-5 h-5" />
                     </button>
                   </div>
                   
                   <div className="p-4 overflow-y-auto flex-1">
-                    <div className="flex w-full gap-2 mb-6">
-                      <input
-                        type="text"
-                        value={newAvatarUrl}
-                        onChange={(e) => setNewAvatarUrl(e.target.value)}
-                        placeholder="输入新的头像图片URL..."
-                        className="flex-1 bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-white/50"
-                      />
-                      <button
-                        onClick={handleAddAvatar}
-                        disabled={!newAvatarUrl.trim()}
-                        className="px-4 py-2 bg-white/20 text-white rounded-lg text-sm font-medium hover:bg-white/30 disabled:opacity-50 transition-colors shrink-0"
-                      >
-                        添加
-                      </button>
-                    </div>
-
-                    <div className="space-y-2">
-                      <h4 className="text-xs font-medium text-zinc-400 mb-3 uppercase tracking-wider">已上传的头像</h4>
-                      {avatarUrls.map((url, idx) => (
-                        <div 
-                          key={idx} 
-                          className={`flex items-center justify-between p-2 rounded-xl border transition-colors ${
-                            currentAvatarIndex === idx 
-                              ? 'bg-white/10 border-white/30' 
-                              : 'bg-white/5 border-white/5 hover:border-white/10'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 overflow-hidden">
-                            <div className="w-10 h-10 rounded-full overflow-hidden border border-white/10 shrink-0 bg-zinc-800 flex items-center justify-center relative">
-                              {url && (
-                                <img 
-                                  src={url} 
-                                  alt={`Avatar ${idx}`} 
-                                  className="w-full h-full object-cover absolute inset-0 z-10"
-                                  onError={(e) => {
-                                    e.currentTarget.style.display = 'none';
-                                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                                  }}
-                                />
-                              )}
-                              <User className={`w-5 h-5 z-0 ${url ? 'hidden' : 'text-zinc-500'}`} />
-                            </div>
-                            <div className="flex flex-col overflow-hidden">
-                              <span className="text-sm text-zinc-200 truncate max-w-[180px]" title={url}>
-                                {url.startsWith('http') ? new URL(url).hostname : 'Local Image'}
-                              </span>
-                              {currentAvatarIndex === idx && (
-                                <span className="text-[10px] text-white flex items-center gap-1">
-                                  <Check className="w-3 h-3" /> 当前使用
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            {currentAvatarIndex !== idx && (
-                              <button 
-                                onClick={() => setCurrentAvatarIndex(idx)} 
-                                className="px-3 py-1.5 text-xs font-medium text-white hover:bg-white/10 rounded-lg transition-colors"
-                              >
-                                使用
-                              </button>
-                            )}
-                            <button 
-                              onClick={() => handleDeleteAvatar(idx)} 
-                              className="p-1.5 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                              title="删除"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
+                    {settingsTab === 'avatar' ? (
+                      <>
+                        <div className="flex w-full gap-2 mb-6">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            ref={settingAvatarInputRef}
+                            onChange={handleLocalAvatarUpload}
+                          />
+                          <button
+                            onClick={() => settingAvatarInputRef.current?.click()}
+                            className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors shrink-0"
+                            title="上传本地图片"
+                          >
+                            <ImageIcon className="w-5 h-5" />
+                          </button>
+                          <input
+                            type="text"
+                            value={newAvatarUrl}
+                            onChange={(e) => setNewAvatarUrl(e.target.value)}
+                            placeholder="或输入图片URL..."
+                            className="flex-1 bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-white/50"
+                          />
+                          <button
+                            onClick={handleAddAvatar}
+                            disabled={!newAvatarUrl.trim()}
+                            className="px-4 py-2 bg-white/20 text-white rounded-lg text-sm font-medium hover:bg-white/30 disabled:opacity-50 transition-colors shrink-0"
+                          >
+                            添加
+                          </button>
                         </div>
-                      ))}
-                    </div>
+
+                        <div className="space-y-2">
+                          <h4 className="text-xs font-medium text-zinc-400 mb-3 uppercase tracking-wider">已上传的头像</h4>
+                          {avatarUrls.map((url, idx) => (
+                            <div 
+                              key={idx} 
+                              className={`flex items-center justify-between p-2 rounded-xl border transition-colors ${
+                                currentAvatarIndex === idx 
+                                  ? 'bg-white/10 border-white/30' 
+                                  : 'bg-white/5 border-white/5 hover:border-white/10'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3 overflow-hidden">
+                                <div className="w-10 h-10 rounded-full overflow-hidden border border-white/10 shrink-0 bg-zinc-800 flex items-center justify-center relative">
+                                  {url && (
+                                    <img 
+                                      src={url} 
+                                      alt={`Avatar ${idx}`} 
+                                      className="w-full h-full object-cover absolute inset-0 z-10"
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = 'none';
+                                        e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                      }}
+                                    />
+                                  )}
+                                  <User className={`w-5 h-5 z-0 ${url ? 'hidden' : 'text-zinc-500'}`} />
+                                </div>
+                                <div className="flex flex-col overflow-hidden">
+                                  <span className="text-sm text-zinc-200 truncate max-w-[180px]" title={url}>
+                                    {url.startsWith('http') ? new URL(url).hostname : 'Local Image'}
+                                  </span>
+                                  {currentAvatarIndex === idx && (
+                                    <span className="text-[10px] text-white flex items-center gap-1">
+                                      <Check className="w-3 h-3" /> 当前使用
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                {currentAvatarIndex !== idx && (
+                                  <button 
+                                    onClick={() => setCurrentAvatarIndex(idx)} 
+                                    className="px-3 py-1.5 text-xs font-medium text-white hover:bg-white/10 rounded-lg transition-colors"
+                                  >
+                                    使用
+                                  </button>
+                                )}
+                                <button 
+                                  onClick={() => handleDeleteAvatar(idx)} 
+                                  className="p-1.5 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                  title="删除"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex w-full gap-2 mb-6">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            ref={settingPhotoInputRef}
+                            onChange={handleLocalPhotoUpload}
+                          />
+                          <button
+                            onClick={() => settingPhotoInputRef.current?.click()}
+                            className="p-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg transition-colors shrink-0"
+                            title="上传本地合照"
+                          >
+                            <ImageIcon className="w-5 h-5" />
+                          </button>
+                          <input
+                            type="text"
+                            value={newPhotoUrl}
+                            onChange={(e) => setNewPhotoUrl(e.target.value)}
+                            placeholder="或输入合照URL..."
+                            className="flex-1 bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-white/50"
+                          />
+                          <button
+                            onClick={handleAddPhoto}
+                            disabled={!newPhotoUrl.trim()}
+                            className="px-4 py-2 bg-blue-500/20 text-blue-400 rounded-lg text-sm font-medium hover:bg-blue-500/30 disabled:opacity-50 transition-colors shrink-0"
+                          >
+                            添加合照
+                          </button>
+                        </div>
+
+                        <div className="space-y-2">
+                          <h4 className="text-xs font-medium text-zinc-400 mb-3 uppercase tracking-wider">2021级贯通班 合照库</h4>
+                          {classPhotos.map((url, idx) => (
+                            <div 
+                              key={idx} 
+                              className="flex items-center justify-between p-2 rounded-xl border bg-white/5 border-white/5 hover:border-white/10 transition-colors"
+                            >
+                              <div className="flex items-center gap-3 overflow-hidden">
+                                <div className="w-16 h-10 rounded-lg overflow-hidden border border-white/10 shrink-0 bg-zinc-800 flex items-center justify-center relative">
+                                  {url && (
+                                    <img 
+                                      src={url} 
+                                      alt={`Photo ${idx}`} 
+                                      className="w-full h-full object-cover absolute inset-0 z-10"
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = 'none';
+                                        e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                      }}
+                                    />
+                                  )}
+                                  <Camera className={`w-5 h-5 z-0 ${url ? 'hidden' : 'text-zinc-500'}`} />
+                                </div>
+                                <div className="flex flex-col overflow-hidden">
+                                  <span className="text-sm text-zinc-200 truncate max-w-[180px]" title={url}>
+                                    {url.startsWith('http') ? new URL(url).hostname : 'Local Image'}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button 
+                                  onClick={() => handleDeletePhoto(idx)} 
+                                  className="p-1.5 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                  title="删除"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </div>
                 </motion.div>
               </motion.div>
@@ -1024,33 +1253,45 @@ function ZhangJingyangContent({ lang, onSaveHistory, initialData }: { lang: 'zh'
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
           {[
-            { id: 'gemini-3.1-pro-preview', name: t.zhangJingyangMathName, desc: t.zhangJingyangMathDesc },
-            { id: 'gemini-3-flash-preview', name: t.zhangJingyangEnglishName, desc: t.zhangJingyangEnglishDesc },
-            { id: 'gemini-3.1-flash-lite-preview', name: t.zhangJingyangChineseName, desc: t.zhangJingyangChineseDesc },
+            { id: 'gemini-3.1-pro-preview', name: t.zhangJingyangMathName, desc: t.zhangJingyangMathDesc, dino: 'trex' },
+            { id: 'gemini-3-flash-preview', name: t.zhangJingyangEnglishName, desc: t.zhangJingyangEnglishDesc, dino: 'triceratops' },
+            { id: 'gemini-3.1-flash-lite-preview', name: t.zhangJingyangChineseName, desc: t.zhangJingyangChineseDesc, dino: 'velociraptor' },
           ].map((m) => (
-            <button
-              key={m.id}
-              onClick={() => setChatModel(m.id as any)}
-              className={`p-3 rounded-xl border transition-all duration-300 text-left group ${
-                chatModel === m.id
-                  ? 'bg-white/20 border-white/40 shadow-[0_0_20px_rgba(255,255,255,0.1)]'
-                  : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'
-              }`}
-            >
-              <div className="flex flex-col gap-1">
-                <div className="flex flex-col">
-                  <span className={`text-xs font-bold transition-colors ${chatModel === m.id ? 'text-white' : 'text-zinc-300'}`}>
-                    {m.name}
-                  </span>
-                  <span className="text-[8px] text-zinc-600 font-mono">
-                    {m.id}
+            <div key={m.id} className="relative group/card">
+              <button
+                onClick={() => setChatModel(m.id as any)}
+                className={`w-full p-3 rounded-xl border transition-all duration-300 text-left group ${
+                  chatModel === m.id
+                    ? 'bg-white/20 border-white/40 shadow-[0_0_20px_rgba(255,255,255,0.1)]'
+                    : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'
+                }`}
+              >
+                <div className="flex flex-col gap-1">
+                  <div className="flex flex-col">
+                    <span className={`text-xs font-bold transition-colors ${chatModel === m.id ? 'text-white' : 'text-zinc-300'}`}>
+                      {m.name}
+                    </span>
+                    <span className="text-[8px] text-zinc-600 font-mono">
+                      {m.id}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-zinc-500 group-hover:text-zinc-400 transition-colors">
+                    {m.desc}
                   </span>
                 </div>
-                <span className="text-[10px] text-zinc-500 group-hover:text-zinc-400 transition-colors">
-                  {m.desc}
-                </span>
-              </div>
-            </button>
+              </button>
+              
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowGame({ show: true, type: m.dino as any });
+                }}
+                className="absolute bottom-2 right-2 p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all z-10 group/game"
+                title="启动跑酷小游戏"
+              >
+                <Gamepad2 className="w-4 h-4 text-white/60 group-hover/game:text-white transition-colors" />
+              </button>
+            </div>
           ))}
         </div>
 
@@ -1087,6 +1328,18 @@ function ZhangJingyangContent({ lang, onSaveHistory, initialData }: { lang: 'zh'
           </button>
         </div>
       </div>
+      
+      <AnimatePresence>
+        {showGame.show && (
+          <DinoGame 
+            dinoType={showGame.type} 
+            onClose={() => setShowGame({ ...showGame, show: false })} 
+            isAdmin={isAdmin}
+            classPhotos={classPhotos}
+            lang={lang}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

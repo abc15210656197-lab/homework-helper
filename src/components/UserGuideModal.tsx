@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, FileText, Headphones, Mic, BookOpen, PenTool, LineChart } from 'lucide-react';
+import { X, FileText, Headphones, Mic, BookOpen, PenTool, LineChart, Palette } from 'lucide-react';
 
 interface UserGuideModalProps {
   isOpen: boolean;
@@ -102,6 +102,17 @@ export function UserGuideModal({ isOpen, onClose, lang }: UserGuideModalProps) {
         'Canvas Mode: Click highlighted errors to see suggestions, accept or reject them.',
         'Paragraph Editing: Click a paragraph to show the arrow icon, click it to open the inline editor. Select an AI model and give specific instructions to rewrite that paragraph.',
         'Global Chat: Discuss the entire essay with AI in the right panel.'
+      ]
+    },
+    {
+      icon: <Palette className="w-5 h-5 text-indigo-400" />,
+      title: lang === 'zh' ? '全局功能' : 'Global Features',
+      details: lang === 'zh' ? [
+        '清空进度：点击顶部“清空”按钮，可重置当前打开功能的进度至初始状态。',
+        '主题切换：点击顶部“主题”按钮，可在“无 (纯黑)”、“流动线条”和“空灵气泡”三种背景间自由切换。'
+      ] : [
+        'Clear Progress: Click the "Clear" button at the top to reset the current feature to its initial state.',
+        'Theme Switcher: Click the "Theme" button at the top to switch between "None (Black)", "Flowing Lines", and "Ethereal Bubbles" backgrounds.'
       ]
     }
   ];

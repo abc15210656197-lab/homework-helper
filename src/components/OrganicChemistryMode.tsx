@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI } from '@google/genai';
-import { Send, Loader2, Image as ImageIcon, X, HelpCircle, Beaker, Copy, Check, RefreshCw } from 'lucide-react';
+import { Send, Loader2, Image as ImageIcon, X, HelpCircle, Beaker, Copy, Check, RefreshCw, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -12,6 +12,103 @@ import 'katex/dist/katex.min.css';
 import { TRANSLATIONS } from '../constants';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+const CHEMISTRY_KNOWLEDGE = {
+  zh: [
+    {
+      title: "物质分类与俗名",
+      content: "**元素形态**：游离态（单质）、化合态（化合物）。\n**同素异形体**：由同种元素形成的不同单质，如 $\\text{O}_2$ 和 $\\text{O}_3$。转化属化学变化。\n**氧化物**：过氧化物（如 $\\text{Na}_2\\text{O}_2$）不是氧化物。\n**俗名**：水玻璃 ($\\text{Na}_2\\text{SiO}_3$ aq)、碱石灰 ($\\text{NaOH}+\\text{CaO}$)、漂白粉 ($\\text{Ca(ClO)}_2$ 有效成分)。"
+    },
+    {
+      title: "物理与化学变化",
+      content: "**化学变化**：煤的干馏、石油裂化/裂解、风化、钝化、炭化、淀粉糊化。\n**物理变化**：石油分馏、$\\text{I}_2$ 升华、$\\text{NaCl}$ 溶于水、潮解、活性炭吸附。"
+    },
+    {
+      title: "分散系（胶体）",
+      content: "**性质**：胶体可通过滤纸，不能通过半透膜。胶体不带电，胶粒带电。\n**聚沉**：加电解质、加相反电荷胶粒、加热、搅拌。\n**应用**：明矾净水 ($\\text{Al(OH)}_3$ 胶体)。"
+    },
+    {
+      title: "卤素与氯 (Cl)",
+      content: "**氧化性**：$\\text{MnO}_4^- > \\text{Cl}_2 > \\text{Br}_2 > \\text{Fe}^{3+} > \\text{I}_2 > \\text{SO}_4^{2-} > \\text{SO}_2 > \\text{S}$。\n**氯气制备**：$\\text{MnO}_2 + 4\\text{HCl}(浓) \\triangleq \\text{MnCl}_2 + \\text{Cl}_2 \\uparrow + 2\\text{H}_2\\text{O}$。饱和食盐水除 $\\text{HCl}$。\n**84消毒液**：$\\text{Cl}_2 + 2\\text{NaOH} = \\text{NaCl} + \\text{NaClO} + \\text{H}_2\\text{O}$。"
+    },
+    {
+      title: "硫 (S) 与氮 (N)",
+      content: "**浓硫酸**：$\\text{Cu} + 2\\text{H}_2\\text{SO}_4(浓) \\triangleq \\text{CuSO}_4 + \\text{SO}_2 \\uparrow + 2\\text{H}_2\\text{O}$。\n**$\\text{SO}_2$ 鉴别**：品红褪色（加热复原），$\\text{KMnO}_4$ 褪色。\n**固氮**：人工 ($\\text{N}_2+3\\text{H}_2 \\rightleftharpoons 2\\text{NH}_3$)、自然 ($\\text{N}_2+\\text{O}_2 \\xrightarrow{放电} 2\\text{NO}$)。\n**氨气**：$\\text{Ca(OH)}_2 + 2\\text{NH}_4\\text{Cl} \\triangleq 2\\text{NH}_3 \\uparrow + 2\\text{H}_2\\text{O} + \\text{CaCl}_2$。"
+    },
+    {
+      title: "钠 (Na) 与铁 (Fe)",
+      content: "**钠**：与 $\\text{CuSO}_4$ 反应先生成 $\\text{NaOH}$ 和 $\\text{H}_2$，再生成 $\\text{Cu(OH)}_2$ 沉淀。\n**侯氏制碱**：$\\text{NaCl} + \\text{NH}_3 + \\text{H}_2\\text{O} + \\text{CO}_2 = \\text{NaHCO}_3 \\downarrow + \\text{NH}_4\\text{Cl}$。\n**铁三角**：$\\text{Fe} \\leftrightarrow \\text{Fe}^{2+} \\leftrightarrow \\text{Fe}^{3+}$。$\\text{Fe}^{3+}$ 遇 $\\text{KSCN}$ 显血红色。"
+    },
+    {
+      title: "铜 (Cu) 与铝 (Al)",
+      content: "**铜绿**：$2\\text{Cu} + \\text{O}_2 + \\text{H}_2\\text{O} + \\text{CO}_2 = \\text{Cu}_2\\text{(OH)}_2\\text{CO}_3$。\n**铝热反应**：$\\text{Fe}_2\\text{O}_3 + 2\\text{Al} \\xrightarrow{高温} 2\\text{Fe} + \\text{Al}_2\\text{O}_3$。\n**铝两性**：$\\text{Al}$ 与 $\\text{NaOH}$ 反应生成 $\\text{NaAlO}_2 + \\text{H}_2$。$\\text{Al}^{3+}$ 易发生双水解。"
+    },
+    {
+      title: "离子反应与氧化还原",
+      content: "**共存禁忌**：$\\text{Al}^{3+}$ 不与 $\\text{OH}^-, \\text{CO}_3^{2-}, \\text{HCO}_3^-$ 共存；$\\text{Fe}^{3+}$ 不与 $\\text{SCN}^-, \\text{I}^-$ 共存。\n**氧化还原**：歧化（中 $\to$ 高+低）、归中（高+低 $\to$ 中）。氧化剂氧化性 $>$ 氧化产物。"
+    },
+    {
+      title: "热化学与反应平衡",
+      content: "**盖斯定律**：$\\Delta H$ 只与始态、终态有关。燃烧热：1mol 纯物质完全燃烧生成稳定氧化物。\n**平衡常数 $K$**：只受温度影响。$Q < K$ 正向移动。\n**勒夏特列原理**：减弱改变。自发性：$\\Delta G = \\Delta H - T\\Delta S < 0$。"
+    },
+    {
+      title: "水溶液中的离子平衡",
+      content: "**水的电离**：升温 $K_w$ 变大，pH 变小。盐类水解：越弱越水解，谁强显谁性。\n**守恒**：电荷守恒、物料守恒、质子守恒。\n**沉淀溶解平衡**：$K_{sp}$ 大的易转化为 $K_{sp}$ 小的。"
+    },
+    {
+      title: "电化学原理",
+      content: "**原电池**：化学能 $\to$ 电能。负极失电子（氧化），正极得电子（还原）。\n**电解池**：电能 $\to$ 化学能。阳极失电子，阴极得电子。\n**氯碱工业**：阳极 $\\text{Cl}^-$ 失电子，阴极 $\\text{H}_2\\text{O}$ 得电子生成 $\\text{H}_2$ 和 $\\text{OH}^-$。"
+    },
+    {
+      title: "物质结构与晶体",
+      content: "**原子半径**：层多径大；同周期核大径小。\n**杂化**：$\\text{CH}_4$ ($sp^3$ 正四面体)、$\\text{NH}_3$ ($sp^3$ 三角锥)、$\\text{H}_2\\text{O}$ ($sp^3$ V形)、$\\text{CO}_2$ ($sp$ 直线)。\n**晶体**：原子晶体 > 离子晶体 > 分子晶体（熔沸点）。"
+    },
+    {
+      title: "有机化学基础",
+      content: "**卤代烃**：水解生成醇；醇溶液加热消去生成烯烃。\n**醛**：银镜反应、加成反应。羧酸：酸性 $R\\text{-COOH} > \\text{H}_2\\text{CO}_3 > \\text{C}_6\\text{H}_5\\text{OH}$。\n**酯化反应**：酸脱羟基醇脱氢，浓硫酸催化加热。"
+    },
+    {
+      title: "化学实验基础",
+      content: "**分离**：分液（下放上倒）、结晶（蒸发/降温）。\n**离子检验**：$\\text{Na}$ (黄)、$\\text{K}$ (紫)、$\\text{Fe}^{3+}$ (SCN红)、$\\text{Cl}^-$ ($\\text{AgNO}_3$白沉)。\n**细节**：容量瓶检漏、滴定管酸碱区分、$\\text{HF}$ 存塑料瓶。"
+    },
+    {
+      title: "烃类性质总结",
+      content: "**烷烃**：取代反应（光照）。\n**烯烃/炔烃**：加成反应 ($Br_2, H_2$)、氧化反应 ($KMnO_4$ 褪色)。\n**苯**：易取代（溴苯、硝基苯）、难加成。"
+    },
+    {
+      title: "醇酚醚重要考点",
+      content: "**乙醇**：催化氧化生成乙醛 ($2\\text{CH}_3\\text{CH}_2\\text{OH} + \\text{O}_2 \\xrightarrow{Cu} 2\\text{CH}_3\\text{CHO} + 2\\text{H}_2\\text{O}$)。\n**苯酚**：弱酸性，遇 $\\text{FeCl}_3$ 显紫色，与浓溴水生成白色沉淀。"
+    },
+    {
+      title: "醛酮羧酸转化",
+      content: "**乙醛**：与新制 $\\text{Cu(OH)}_2$ 反应生成砖红色沉淀 ($\\text{Cu}_2\\text{O}$)。\n**羧酸**：具有酸性，能发生酯化反应。"
+    },
+    {
+      title: "糖类与蛋白质",
+      content: "**葡萄糖**：多羟基醛，具有还原性。\n**蛋白质**：盐析（物理）、变性（化学）、颜色反应（浓硝酸变黄）、灼烧有烧焦羽毛味。"
+    },
+    {
+      title: "有机合成策略",
+      content: "**增长碳链**：加聚反应、缩聚反应、与 $\\text{HCN}$ 加成。\n**官能团引入**：卤化、水解、氧化、还原、酯化。"
+    }
+  ],
+  en: [
+    { title: "Matter Classification", content: "Elemental forms: free state (simple substance), combined state (compound).\nAllotropes: Different simple substances formed by the same element, e.g., $\\text{O}_2$ and $\\text{O}_3$." },
+    { title: "Physical & Chemical Changes", content: "Chemical: Coal distillation, petroleum cracking, weathering, passivation, carbonization.\nPhysical: Petroleum fractionation, $\\text{I}_2$ sublimation, $\\text{NaCl}$ dissolution." },
+    { title: "Dispersed Systems (Colloids)", content: "Properties: Colloids pass through filter paper but not semi-permeable membranes. Particles are charged.\nCoagulation: Adding electrolytes, heating, or stirring." },
+    { title: "Halogens & Chlorine", content: "Oxidizing power: $\\text{MnO}_4^- > \\text{Cl}_2 > \\text{Br}_2 > \\text{Fe}^{3+} > \\text{I}_2 > \\text{SO}_4^{2-} > \\text{SO}_2 > \\text{S}$.\nChlorine prep: $\\text{MnO}_2 + 4\\text{HCl}(conc) \\triangleq \\text{MnCl}_2 + \\text{Cl}_2 \\uparrow + 2\\text{H}_2\\text{O}$." },
+    { title: "Sulfur & Nitrogen", content: "Conc. $\\text{H}_2\\text{SO}_4$: $\\text{Cu} + 2\\text{H}_2\\text{SO}_4 \\triangleq \\text{CuSO}_4 + \\text{SO}_2 \\uparrow + 2\\text{H}_2\\text{O}$.\nNitrogen fixation: Artificial ($\\text{N}_2+3\\text{H}_2 \\rightleftharpoons 2\\text{NH}_3$), Natural ($\\text{N}_2+\\text{O}_2 \\xrightarrow{discharge} 2\\text{NO}$)." },
+    { title: "Sodium & Iron", content: "Sodium: Reacts with water first, then precipitates $\\text{Cu(OH)}_2$ in $\\text{CuSO}_4$ solution.\nIron triangle: $\\text{Fe} \\leftrightarrow \\text{Fe}^{2+} \\leftrightarrow \\text{Fe}^{3+}$. $\\text{Fe}^{3+}$ turns blood red with $\\text{KSCN}$." },
+    { title: "Copper & Aluminum", content: "Thermite reaction: $\\text{Fe}_2\\text{O}_3 + 2\\text{Al} \\xrightarrow{high T} 2\\text{Fe} + \\text{Al}_2\\text{O}_3$.\nAluminum amphoterism: Reacts with both acids and bases to produce $\\text{H}_2$." },
+    { title: "Ionic Reactions", content: "Coexistence: $\\text{Al}^{3+}$ cannot coexist with $\\text{OH}^-, \\text{CO}_3^{2-}, \\text{HCO}_3^-$.\nRedox: Oxidizing agent power $>$ Oxidized product power." },
+    { title: "Thermochemistry", content: "Hess's Law: $\\Delta H$ depends only on initial and final states.\nSpontaneity: $\\Delta G = \\Delta H - T\\Delta S < 0$." },
+    { title: "Ionic Equilibrium", content: "Water ionization: $K_w$ increases with temperature.\nSalt hydrolysis: 'The weaker the acid/base, the more the salt hydrolyzes'." },
+    { title: "Electrochemistry", content: "Galvanic cell: Chemical $\\to$ Electrical. Anode: Oxidation, Cathode: Reduction.\nElectrolytic cell: Electrical $\\to$ Chemical." },
+    { title: "Structure & Crystals", content: "Hybridization: $\\text{CH}_4$ ($sp^3$), $\\text{NH}_3$ ($sp^3$), $\\text{H}_2\\text{O}$ ($sp^3$), $\\text{CO}_2$ ($sp$).\nCrystal melting points: Covalent > Ionic > Molecular." },
+    { title: "Organic Chemistry", content: "Aldehydes: Silver mirror reaction. Carboxylic acids: Acidity $R\\text{-COOH} > \\text{H}_2\\text{CO}_3 > \\text{PhOH}$.\nEsterification: Acid loses -OH, alcohol loses -H." },
+    { title: "Chemical Experiments", content: "Separation: Funneling, crystallization.\nIon testing: $\\text{Na}$ (yellow), $\\text{K}$ (purple), $\\text{Fe}^{3+}$ (red with SCN)." }
+  ]
+};
 
 const getSystemInstruction = (lang: 'zh' | 'en') => {
   if (lang === 'en') {
@@ -192,9 +289,53 @@ const MarkdownComponents = (lang: 'zh' | 'en', onRegenerateSvg?: (svgCode: strin
   }
 });
 
-export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData }: { lang: 'zh' | 'en', model: string, onSaveHistory: (mode: string, summary: string, data: any) => void, initialData?: any }) {
+const CLASS_MEMBERS = [
+  "包涵", "陈明见", "崔天浩", "段柯言", "房奥洋", "冯子夏", "高嘉怡", "郭晗阳", "顾雨晴", 
+  "郝天一", "和诗涵", "黄采薇", "贾灵坤", "姜亦铭", "姜雨彤", "金孟源", "李嘉桐", "刘玟言", 
+  "刘雅菲", "刘梓涵", "牛思程", "唐子渔", "王若熹", "温凯翔", "闻钰翔", "吴琬琳", "薛云朗", 
+  "徐望童", "叶瑾宸", "尤子谦", "查俊祺", "张景洋", "张祎辰", "赵思源", "邹韫瞳"
+];
+
+const Danmaku = () => {
+  const [items, setItems] = useState<{ id: number; name: string; top: number; duration: number; delay: number }[]>([]);
+
+  useEffect(() => {
+    const newItems = Array.from({ length: 20 }).map((_, i) => ({
+      id: i,
+      name: CLASS_MEMBERS[Math.floor(Math.random() * CLASS_MEMBERS.length)],
+      top: Math.random() * 80 + 10, // 10% to 90% height
+      duration: Math.random() * 10 + 10, // 10s to 20s
+      delay: Math.random() * 10
+    }));
+    setItems(newItems);
+  }, []);
+
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 opacity-40">
+      {items.map((item) => (
+        <motion.div
+          key={item.id}
+          initial={{ x: '100vw' }}
+          animate={{ x: '-20vw' }}
+          transition={{
+            duration: item.duration,
+            repeat: Infinity,
+            ease: "linear",
+            delay: item.delay
+          }}
+          className="absolute whitespace-nowrap text-white font-bold text-lg md:text-2xl tracking-widest drop-shadow-lg"
+          style={{ top: `${item.top}%` }}
+        >
+          {item.name}
+        </motion.div>
+      ))}
+    </div>
+  );
+};
+
+export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData, onBack }: { lang: 'zh' | 'en', model: string, onSaveHistory: (mode: string, summary: string, data: any) => void, initialData?: any, onBack?: () => void }) {
   const t = TRANSLATIONS[lang];
-  const [messages, setMessages] = useState<{role: 'user'|'model', text: string, image?: string}[]>(initialData?.messages || []);
+  const [messages, setMessages] = useState<{role: 'user'|'model', text: string, images?: string[]}[]>(initialData?.messages || []);
   
   useEffect(() => {
     if (initialData?.messages) {
@@ -204,8 +345,10 @@ export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData }
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [activeModel, setActiveModel] = useState(model || 'gemini-3.1-pro-preview');
+  const [showModelDropdown, setShowModelDropdown] = useState(false);
+  const [currentKnowledgeIndex, setCurrentKnowledgeIndex] = useState(Math.floor(Math.random() * CHEMISTRY_KNOWLEDGE[lang].length));
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -215,22 +358,35 @@ export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData }
     { id: 'conditions', text: t.organicModeQuickAction3 },
   ];
 
+  const models = [
+    { id: 'gemini-3.1-pro-preview', name: 'Pro' },
+    { id: 'gemini-3-flash-preview', name: 'Flash' },
+    { id: 'gemini-3.1-flash-lite-preview', name: 'Flash-Lite' }
+  ];
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setSelectedImage(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setSelectedImages(prev => [...prev, reader.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+    
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+  };
+
+  const removeImage = (index: number) => {
+    setSelectedImages(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleRegenerateSvg = (svgCode: string) => {
@@ -241,38 +397,42 @@ export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData }
     handleSend(prompt);
   };
 
-  const handleSend = async (overrideText?: string) => {
-    const textToSend = overrideText || input.trim();
-    if ((!textToSend && !selectedImage) || isTyping) return;
+  const handleSend = async (overrideText?: string | React.MouseEvent) => {
+    const textToSend = typeof overrideText === 'string' ? overrideText : input.trim();
+    if ((!textToSend && selectedImages.length === 0) || isTyping) return;
     
     const userText = textToSend;
-    const userImage = selectedImage;
+    const userImages = [...selectedImages];
     
     setInput('');
-    setSelectedImage(null);
-    const newUserMsg = { role: 'user' as const, text: userText, image: userImage || undefined };
+    setSelectedImages([]);
+    const newUserMsg = { role: 'user' as const, text: userText, images: userImages.length > 0 ? userImages : undefined };
     setMessages(prev => [...prev, newUserMsg]);
     setIsTyping(true);
 
     try {
       const historyContents = messages.map(m => {
         const parts: any[] = [{ text: m.text }];
-        if (m.image) {
-          const base64Data = m.image.split(',')[1];
-          const mimeType = m.image.split(';')[0].split(':')[1];
-          parts.unshift({
-            inlineData: { data: base64Data, mimeType }
+        if (m.images && m.images.length > 0) {
+          m.images.forEach(img => {
+            const base64Data = img.split(',')[1];
+            const mimeType = img.split(';')[0].split(':')[1];
+            parts.unshift({
+              inlineData: { data: base64Data, mimeType }
+            });
           });
         }
         return { role: m.role, parts };
       });
       
-      const currentParts: any[] = [{ text: userText || '请解析这张图片中的有机化学问题。' }];
-      if (userImage) {
-        const base64Data = userImage.split(',')[1];
-        const mimeType = userImage.split(';')[0].split(':')[1];
-        currentParts.unshift({
-          inlineData: { data: base64Data, mimeType }
+      const currentParts: any[] = [{ text: userText || (lang === 'zh' ? '请解析这张图片中的有机化学问题。' : 'Please analyze the organic chemistry problem in this image.') }];
+      if (userImages.length > 0) {
+        userImages.forEach(img => {
+          const base64Data = img.split(',')[1];
+          const mimeType = img.split(';')[0].split(':')[1];
+          currentParts.unshift({
+            inlineData: { data: base64Data, mimeType }
+          });
         });
       }
 
@@ -293,7 +453,7 @@ export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData }
           if (firstUserMsg && firstUserMsg.text) {
             summary = firstUserMsg.text.substring(0, 30) + (firstUserMsg.text.length > 30 ? '...' : '');
           }
-          const historyMessages = newMessages.map(m => ({ ...m, image: undefined }));
+          const historyMessages = newMessages.map(m => ({ ...m, images: undefined }));
           onSaveHistory('organic-chemistry', summary, { messages: historyMessages });
           return newMessages;
         });
@@ -307,7 +467,7 @@ export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData }
         if (firstUserMsg && firstUserMsg.text) {
           summary = firstUserMsg.text.substring(0, 30) + (firstUserMsg.text.length > 30 ? '...' : '');
         }
-        const historyMessages = newMessages.map(m => ({ ...m, image: undefined }));
+        const historyMessages = newMessages.map(m => ({ ...m, images: undefined }));
         onSaveHistory('organic-chemistry', summary, { messages: historyMessages });
         return newMessages;
       });
@@ -316,23 +476,120 @@ export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData }
     }
   };
 
+  const isGeneratingAnalysis = isTyping && messages.length >= 2;
+
   return (
-    <div className="flex flex-col h-full bg-zinc-950 text-white overflow-hidden relative">
-      <div className="flex-1 overflow-y-auto p-6 pt-10 max-w-4xl mx-auto w-full flex flex-col">
-        <div className="mb-8 text-center flex flex-col items-center relative">
-          <div className="flex items-center gap-3 mb-2">
-            <h2 className="text-3xl font-bold text-white flex items-center gap-2">
-              <Beaker className="w-8 h-8 text-white" />
+    <div className="fixed inset-0 z-[150] bg-zinc-950 text-white overflow-hidden flex flex-col">
+      {/* Global Danmaku Background */}
+      <Danmaku />
+      
+      {/* Top Left Back Button */}
+      <div className="absolute top-6 left-6 z-[200]">
+        <button 
+          onClick={onBack}
+          className="p-3 bg-white/10 hover:bg-white/20 border border-white/10 rounded-2xl transition-all active:scale-95 flex items-center gap-2 backdrop-blur-md"
+        >
+          <ChevronLeft className="w-6 h-6" />
+          <span className="font-bold hidden md:inline">返回</span>
+        </button>
+      </div>
+
+      {/* Full-screen waiting overlay */}
+      <AnimatePresence>
+        {isGeneratingAnalysis && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-[180] bg-blue-950/95 backdrop-blur-xl flex flex-col items-center justify-center p-8"
+          >
+            <Loader2 className="w-16 h-16 animate-spin text-blue-400 mb-8" />
+            <h2 className="text-2xl font-bold text-white mb-2">
+              {lang === 'zh' ? '正在深度解析机理与绘制结构式...' : 'Analyzing mechanism and drawing structures...'}
+            </h2>
+            <p className="text-zinc-400 mb-12 text-center">
+              {lang === 'zh' ? '生成高质量的 SVG 结构式需要一些时间，请稍候。' : 'Generating high-quality SVG structures takes some time, please wait.'}
+            </p>
+
+            <div className="max-w-4xl w-full bg-gradient-to-br from-blue-900 to-blue-600 border border-white/20 rounded-[2.5rem] p-10 relative overflow-hidden shadow-[0_40px_80px_rgba(0,0,0,0.5)]">
+              {/* Danmaku Layer */}
+              <Danmaku />
+
+              <div className="relative z-10">
+                <h3 className="text-sm font-bold text-white/80 mb-6 flex items-center gap-2 uppercase tracking-widest">
+                  <Beaker className="w-5 h-5" />
+                  {lang === 'zh' ? '等待期间复习一下：' : 'Review while waiting:'}
+                </h3>
+                
+                <div className="flex items-center gap-8">
+                  <button 
+                    onClick={() => setCurrentKnowledgeIndex(prev => (prev - 1 + CHEMISTRY_KNOWLEDGE[lang].length) % CHEMISTRY_KNOWLEDGE[lang].length)}
+                    className="p-3 hover:bg-white/10 rounded-full transition-colors text-white/40 hover:text-white shrink-0"
+                  >
+                    <ChevronLeft className="w-10 h-10" />
+                  </button>
+
+                  <div className="flex-1 min-h-[220px] flex flex-col justify-center">
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={currentKnowledgeIndex}
+                        initial={{ opacity: 0, x: 30 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -30 }}
+                        transition={{ duration: 0.4, ease: "easeOut" }}
+                      >
+                        <h4 className="text-3xl font-black text-white mb-6 tracking-tight">
+                          {CHEMISTRY_KNOWLEDGE[lang][currentKnowledgeIndex].title}
+                        </h4>
+                        <div className="text-white/90 leading-relaxed markdown-body prose prose-invert prose-lg max-w-none font-medium">
+                          <ReactMarkdown 
+                            remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} 
+                            rehypePlugins={[rehypeKatex]}
+                          >
+                            {CHEMISTRY_KNOWLEDGE[lang][currentKnowledgeIndex].content}
+                          </ReactMarkdown>
+                        </div>
+                      </motion.div>
+                    </AnimatePresence>
+                  </div>
+
+                  <button 
+                    onClick={() => setCurrentKnowledgeIndex(prev => (prev + 1) % CHEMISTRY_KNOWLEDGE[lang].length)}
+                    className="p-3 hover:bg-white/10 rounded-full transition-colors text-white/40 hover:text-white shrink-0"
+                  >
+                    <ChevronRight className="w-10 h-10" />
+                  </button>
+                </div>
+                
+                <div className="flex gap-2 mt-10 justify-center">
+                  {CHEMISTRY_KNOWLEDGE[lang].map((_, idx) => (
+                    <div 
+                      key={idx} 
+                      className={`h-2 rounded-full transition-all duration-500 ${idx === currentKnowledgeIndex ? 'w-10 bg-white' : 'w-2 bg-white/20'}`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="flex-1 overflow-y-auto p-6 pt-24 max-w-5xl mx-auto w-full flex flex-col relative z-10">
+        <div className="mb-12 text-center flex flex-col items-center relative">
+          <div className="flex items-center gap-4 mb-4">
+            <h2 className="text-5xl font-black text-white flex items-center gap-4 tracking-tighter">
+              <Beaker className="w-12 h-12 text-blue-400" />
               {t.organicModeTitle}
             </h2>
             <button 
               onClick={() => setShowHelp(!showHelp)}
-              className="p-1.5 text-zinc-500 hover:text-white transition-colors"
+              className="p-2 text-zinc-500 hover:text-white transition-colors"
             >
-              <HelpCircle className="w-5 h-5" />
+              <HelpCircle className="w-6 h-6" />
             </button>
           </div>
-          <p className="text-white/60 mb-4 italic">{t.organicModeSubtitle}</p>
+          <p className="text-white/40 text-xl font-medium italic tracking-wide">{t.organicModeSubtitle}</p>
 
           <AnimatePresence>
             {showHelp && (
@@ -340,13 +597,13 @@ export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData }
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                className="w-full max-w-md bg-white/5 border border-white/10 rounded-2xl p-4 mb-6 text-left overflow-hidden"
+                className="w-full max-w-lg bg-white/5 border border-white/10 rounded-3xl p-6 mt-8 text-left overflow-hidden shadow-2xl"
               >
-                <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
-                  <HelpCircle className="w-4 h-4" />
+                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                  <HelpCircle className="w-5 h-5 text-emerald-400" />
                   {t.organicModeInstructions}
                 </h3>
-                <ul className="text-xs text-zinc-400 space-y-2 list-disc list-inside">
+                <ul className="text-sm text-zinc-400 space-y-3 list-disc list-inside">
                   <li>{t.organicModeInstruction1}</li>
                   <li>{t.organicModeInstruction2}</li>
                   <li>{t.organicModeInstruction3}</li>
@@ -357,63 +614,34 @@ export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData }
           </AnimatePresence>
         </div>
 
-        <div className="flex-1 overflow-y-auto mb-6 space-y-6 custom-scrollbar pr-2">
+        <div className="flex-1 overflow-y-auto mb-8 space-y-8 custom-scrollbar pr-4">
           {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full text-white/30 gap-8">
-              <div className="flex flex-col items-center gap-4">
-                <Beaker className="w-12 h-12 text-white/50" />
-                <p className="text-center max-w-md">{t.organicModeEmpty}</p>
+            <div className="flex flex-col items-center justify-center h-full text-white/20 gap-12 py-20">
+              <div className="relative">
+                <div className="absolute inset-0 bg-emerald-500/20 blur-[100px] rounded-full"></div>
+                <Beaker className="w-32 h-32 text-white/10 relative z-10" />
               </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-3xl mt-4">
-                {[
-                  {
-                    id: 'gemini-3.1-pro-preview',
-                    title: lang === 'zh' ? 'Pro 深度解析' : 'Pro Deep Analysis',
-                    desc: lang === 'zh' ? '复杂推断，深度机理' : 'Complex deduction, deep mechanism'
-                  },
-                  {
-                    id: 'gemini-3-flash-preview',
-                    title: lang === 'zh' ? 'Flash 快速解答' : 'Flash Quick Answer',
-                    desc: lang === 'zh' ? '反应迅速，全能助手' : 'Fast response, versatile'
-                  },
-                  {
-                    id: 'gemini-3.1-flash-lite-preview',
-                    title: lang === 'zh' ? 'Flash-Lite 极速版' : 'Flash-Lite Speed',
-                    desc: lang === 'zh' ? '简单问题，极速响应' : 'Simple questions, fast'
-                  }
-                ].map(m => (
-                  <button
-                    key={m.id}
-                    onClick={() => setActiveModel(m.id)}
-                    className={`p-4 rounded-2xl border text-left transition-all ${
-                      activeModel === m.id 
-                        ? 'bg-white/10 border-white/30 text-white' 
-                        : 'bg-white/5 border-white/5 text-zinc-500 hover:bg-white/10 hover:text-zinc-300'
-                    }`}
-                  >
-                    <h3 className="font-bold text-sm mb-1 text-white">{m.title}</h3>
-                    <div className="text-[10px] font-mono opacity-50 mb-2">{m.id}</div>
-                    <p className="text-xs">{m.desc}</p>
-                  </button>
-                ))}
-              </div>
+              <p className="text-center max-w-lg text-2xl font-bold leading-relaxed">{t.organicModeEmpty}</p>
             </div>
           )}
           
           {messages.map((msg, idx) => (
             <motion.div 
               key={idx}
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
-              <div className={`max-w-[90%] ${msg.role === 'user' ? 'bg-white text-black' : 'bg-zinc-900 border border-zinc-800 text-zinc-200'} rounded-2xl p-4 shadow-sm`}>
-                {msg.image && (
-                  <img src={msg.image} alt="Uploaded problem" className="max-w-xs rounded-lg mb-3 border border-white/20" />
+              <div className={`max-w-[90%] ${msg.role === 'user' ? 'bg-white text-black' : 'bg-zinc-900 border border-zinc-800 text-zinc-200'} rounded-3xl p-6 shadow-xl`}>
+                {msg.images && msg.images.length > 0 && (
+                  <div className="flex flex-wrap gap-3 mb-4">
+                    {msg.images.map((img, i) => (
+                      <img key={i} src={img} alt="Uploaded problem" className="max-w-[300px] max-h-[300px] rounded-2xl border border-white/10 object-contain bg-zinc-950 shadow-inner" />
+                    ))}
+                  </div>
                 )}
                 {msg.role === 'model' ? (
-                  <div className="markdown-body prose prose-invert max-w-none prose-pre:bg-zinc-950 prose-pre:border prose-pre:border-zinc-800">
+                  <div className="markdown-body prose prose-invert max-w-none prose-pre:bg-zinc-950 prose-pre:border prose-pre:border-zinc-800 prose-lg">
                     <ReactMarkdown 
                       remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} 
                       rehypePlugins={[rehypeRaw, rehypeKatex]}
@@ -423,35 +651,37 @@ export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData }
                     </ReactMarkdown>
                   </div>
                 ) : (
-                  <p className="whitespace-pre-wrap">{msg.text}</p>
+                  msg.text && <p className="whitespace-pre-wrap text-lg font-medium">{msg.text}</p>
                 )}
               </div>
             </motion.div>
           ))}
           
-          {isTyping && (
+          {isTyping && !isGeneratingAnalysis && (
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               className="flex justify-start"
             >
-              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin text-white" />
-                <span className="text-sm text-zinc-400">正在解析机理...</span>
+              <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 flex items-center gap-4 shadow-xl">
+                <Loader2 className="w-6 h-6 animate-spin text-emerald-400" />
+                <span className="text-lg font-medium text-zinc-400">
+                  {lang === 'zh' ? '正在思考...' : 'Thinking...'}
+                </span>
               </div>
             </motion.div>
           )}
           <div ref={chatEndRef} />
         </div>
 
-        <div className="relative max-w-3xl mx-auto w-full">
-          <div className="flex flex-wrap gap-2 mb-4">
+        <div className="relative max-w-4xl mx-auto w-full pb-10">
+          <div className="flex flex-wrap gap-3 mb-6">
             {quickActions.map(action => (
               <button
                 key={action.id}
                 onClick={() => handleSend(action.text)}
                 disabled={isTyping}
-                className="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-xs text-zinc-300 hover:text-white transition-all"
+                className="px-5 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-sm font-bold text-zinc-300 hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
               >
                 {action.text}
               </button>
@@ -459,64 +689,107 @@ export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData }
           </div>
 
           <AnimatePresence>
-            {selectedImage && (
+            {selectedImages.length > 0 && (
               <motion.div 
-                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                initial={{ opacity: 0, y: 20, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                className="absolute bottom-full mb-2 left-0 bg-zinc-800 p-2 rounded-xl border border-zinc-700 shadow-lg"
+                exit={{ opacity: 0, y: 20, scale: 0.95 }}
+                className="absolute bottom-full mb-4 left-0 bg-zinc-800/90 backdrop-blur-md p-3 rounded-2xl border border-zinc-700 shadow-2xl flex flex-wrap gap-3 max-w-full overflow-x-auto custom-scrollbar"
               >
-                <div className="relative group">
-                  <img src={selectedImage} alt="Selected" className="h-24 rounded-lg object-contain bg-zinc-900" />
-                  <button 
-                    onClick={() => setSelectedImage(null)}
-                    className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
+                {selectedImages.map((img, idx) => (
+                  <div key={idx} className="relative group shrink-0">
+                    <img src={img} alt="Selected" className="h-24 rounded-xl object-contain bg-zinc-900 border border-zinc-700" />
+                    <button 
+                      onClick={() => removeImage(idx)}
+                      className="absolute -top-2 -right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
               </motion.div>
             )}
           </AnimatePresence>
 
-          <div className="flex items-end gap-2 bg-zinc-900 border border-zinc-800 rounded-3xl p-2 shadow-sm focus-within:border-white/50 focus-within:ring-1 focus-within:ring-white/50 transition-all">
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              ref={fileInputRef}
-              onChange={handleImageUpload}
-            />
-            <button 
-              onClick={() => fileInputRef.current?.click()}
-              className="p-3 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-full transition-colors shrink-0"
-              title="上传题目图片"
-            >
-              <ImageIcon className="w-5 h-5" />
-            </button>
-            
-            <textarea 
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              placeholder={t.organicModePlaceholder}
-              className="flex-1 bg-transparent border-none text-white text-sm focus:ring-0 outline-none resize-none py-3 px-2 max-h-32 custom-scrollbar"
-              rows={1}
-              style={{ minHeight: '44px' }}
-            />
-            
-            <button 
-              onClick={() => handleSend()}
-              disabled={(!input.trim() && !selectedImage) || isTyping}
-              className="p-3 bg-white hover:bg-zinc-200 disabled:bg-zinc-800 disabled:text-zinc-600 text-black rounded-full transition-colors shrink-0"
-            >
-              <Send className="w-5 h-5" />
-            </button>
+          <div className="flex flex-col bg-zinc-900/80 backdrop-blur-md border border-zinc-800 rounded-[2rem] shadow-2xl focus-within:border-emerald-500/50 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all relative overflow-hidden">
+            {/* Model Selection Bar */}
+            <div className="flex items-center justify-between px-6 py-3 border-b border-zinc-800/50 bg-zinc-950/50">
+              <div className="relative">
+                <button
+                  onClick={() => setShowModelDropdown(!showModelDropdown)}
+                  className="flex items-center gap-2 text-sm font-bold text-zinc-400 hover:text-zinc-200 transition-colors"
+                >
+                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                  {models.find(m => m.id === activeModel)?.name || 'Model'}
+                  <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${showModelDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                
+                <AnimatePresence>
+                  {showModelDropdown && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 10 }}
+                      className="absolute bottom-full left-0 mb-4 w-56 bg-zinc-800 border border-zinc-700 rounded-2xl shadow-2xl overflow-hidden z-50"
+                    >
+                      {models.map(m => (
+                        <button
+                          key={m.id}
+                          onClick={() => {
+                            setActiveModel(m.id);
+                            setShowModelDropdown(false);
+                          }}
+                          className={`w-full text-left px-5 py-3 text-sm font-medium transition-colors ${activeModel === m.id ? 'bg-emerald-500/20 text-emerald-400' : 'text-zinc-300 hover:bg-zinc-700'}`}
+                        >
+                          {m.name}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+
+            <div className="flex items-end gap-3 p-4">
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                ref={fileInputRef}
+                onChange={handleImageUpload}
+              />
+              <button 
+                onClick={() => fileInputRef.current?.click()}
+                className="p-4 text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-2xl transition-all shrink-0 active:scale-90"
+                title="上传题目图片"
+              >
+                <ImageIcon className="w-7 h-7" />
+              </button>
+              
+              <textarea 
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                placeholder={t.organicModePlaceholder}
+                className="flex-1 bg-transparent border-none text-white text-lg focus:ring-0 outline-none resize-none py-4 px-2 max-h-48 custom-scrollbar font-medium"
+                rows={1}
+                style={{ minHeight: '56px' }}
+              />
+              
+              <button 
+                onClick={() => handleSend()}
+                disabled={(!input.trim() && selectedImages.length === 0) || isTyping}
+                className="p-4 bg-emerald-500 hover:bg-emerald-400 disabled:bg-zinc-800 disabled:text-zinc-600 text-black rounded-2xl transition-all shrink-0 shadow-lg shadow-emerald-500/20 active:scale-90"
+              >
+                <Send className="w-7 h-7" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
