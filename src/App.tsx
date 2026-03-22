@@ -901,13 +901,13 @@ CRITICAL INSTRUCTIONS:
               transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
               className="absolute inset-0 bg-white/20 blur-2xl rounded-full"
             />
-            <div className="w-24 h-24 rounded-[2rem] bg-white/5 border border-white/10 flex items-center justify-center shadow-[0_0_50px_rgba(255,255,255,0.1)] relative overflow-hidden backdrop-blur-sm">
+            <div className="w-32 h-32 rounded-[2.5rem] bg-white/5 border border-white/10 flex items-center justify-center shadow-[0_0_50px_rgba(255,255,255,0.1)] relative overflow-hidden backdrop-blur-sm">
               <motion.div 
                 animate={{ rotate: 360 }}
                 transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-                className="absolute inset-0 bg-gradient-to-tr from-white/10 via-transparent to-white/10"
+                className="absolute -inset-8 bg-gradient-to-tr from-white/10 via-transparent to-white/10"
               />
-              <Sparkles className="w-12 h-12 text-white relative z-10 drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]" />
+              <Sparkles className="w-16 h-16 text-white relative z-10 drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]" />
             </div>
           </div>
 
@@ -1838,7 +1838,7 @@ CRITICAL INSTRUCTIONS:
               transition={{ duration: 0.3 }}
               className="flex-1 flex flex-col"
             >
-              <div className="flex-1 min-h-0 bg-black/40 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
+              <div className="flex-1 min-h-[50vh] md:min-h-[70vh] rounded-2xl overflow-hidden border border-white/10 shadow-2xl bg-black/10 backdrop-blur-3xl liquid-panel">
                 <ZhangJingyangMode 
                   key={clearKey}
                   lang={language} 
@@ -1856,7 +1856,7 @@ CRITICAL INSTRUCTIONS:
               transition={{ duration: 0.3 }}
               className="flex-1 flex flex-col"
             >
-              <div className="flex-1 min-h-0 bg-black/40 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
+              <div className="flex-1 min-h-[50vh] md:min-h-[70vh] rounded-2xl overflow-hidden border border-white/10 shadow-2xl bg-black/10 backdrop-blur-3xl liquid-panel">
                 <OrganicChemistryMode 
                   key={clearKey}
                   lang={language} 

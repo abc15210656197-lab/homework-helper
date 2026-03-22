@@ -1091,7 +1091,7 @@ function ZhangJingyangContent({ lang, onSaveHistory, initialData }: { lang: 'zh'
                             {schoolLogoUrl && (
                               <div className="flex items-center gap-3 p-2 bg-black/20 rounded-xl border border-white/5">
                                 <div className="w-12 h-12 rounded-full overflow-hidden border border-white/10 bg-white flex items-center justify-center shrink-0">
-                                  <img src={schoolLogoUrl} alt="School Logo" className="w-10 h-10 object-contain" />
+                                  <img src={schoolLogoUrl} alt="School Logo" className="w-11 h-11 object-contain" />
                                 </div>
                                 <div className="flex flex-col overflow-hidden">
                                   <span className="text-xs text-zinc-400 uppercase font-bold">当前校徽</span>

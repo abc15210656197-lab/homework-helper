@@ -32,7 +32,7 @@ const MemorialScreen = ({
 
   return (
     <motion.div 
-      className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#20b2aa] to-[#001f3f] z-[999999] overflow-hidden"
+      className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-sky-300 to-sky-100 z-[999999] overflow-hidden"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -282,9 +282,9 @@ const MemorialScreen = ({
               transition={{ duration: 0.3 }}
             >
               {schoolLogoUrl ? (
-                <img src={schoolLogoUrl} alt="School Logo" className="w-14 h-14 sm:w-16 sm:h-16 object-contain" />
+                <img src={schoolLogoUrl} alt="School Logo" className="w-18 h-18 sm:w-22 sm:h-22 object-contain" />
               ) : (
-                <div className="w-14 h-14 sm:w-16 sm:h-16 bg-blue-100 rounded-full flex items-center justify-center">
+                <div className="w-18 h-18 sm:w-22 sm:h-22 bg-blue-100 rounded-full flex items-center justify-center">
                   <span className="text-[#0074D9] font-bold text-xs">点击开启</span>
                 </div>
               )}
