@@ -142,13 +142,13 @@ export function QuestionDetail({
         <div className={`p-1.5 rounded-lg ring-1 ${
           type === 'question' ? 'bg-white/10 ring-white/20' : 
           type === 'answer' ? 'bg-rose-500/20 ring-rose-500/30' :
-          type === 'explanation' ? 'bg-emerald-500/20 ring-emerald-500/30' : 
+          type === 'explanation' ? 'bg-indigo-500/20 ring-indigo-500/30' : 
           'bg-amber-500/20 ring-amber-500/30'
         }`}>
           <Icon className={`w-4 h-4 ${
             type === 'question' ? 'text-white' : 
             type === 'answer' ? 'text-rose-400' :
-            type === 'explanation' ? 'text-emerald-400' : 
+            type === 'explanation' ? 'text-indigo-400' : 
             'text-amber-400'
           }`} />
         </div>
@@ -160,7 +160,7 @@ export function QuestionDetail({
             onClick={handleCopy}
             className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold text-zinc-900 bg-white rounded-full hover:bg-zinc-200 transition-all active:scale-95 shadow-[0_0_15px_rgba(255,255,255,0.2)]"
           >
-            {copied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+            {copied ? <Check className="w-3 h-3 text-indigo-600" /> : <Copy className="w-3 h-3" />}
             {copied ? t.copied : t.copy}
           </button>
         )}
@@ -325,8 +325,8 @@ export function QuestionDetail({
         <div className="rounded-2xl border border-white/10 p-4 md:p-5 backdrop-blur-3xl ring-1 ring-white/5 liquid-panel">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-emerald-500/20 rounded-lg ring-1 ring-emerald-500/30">
-                <Info className="w-4 h-4 text-emerald-400" />
+              <div className="p-1.5 bg-indigo-500/20 rounded-lg ring-1 ring-indigo-500/30">
+                <Info className="w-4 h-4 text-indigo-400" />
               </div>
               <h4 className="font-semibold text-xs text-white tracking-tight">{t.explanation}</h4>
             </div>
@@ -408,8 +408,8 @@ export function QuestionDetail({
                 <div className="p-6 flex flex-col h-full">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
-                      <div className="p-1.5 bg-emerald-500/20 rounded-lg ring-1 ring-emerald-500/30">
-                        <Info className="w-4 h-4 text-emerald-400" />
+                      <div className="p-1.5 bg-indigo-500/20 rounded-lg ring-1 ring-indigo-500/30">
+                        <Info className="w-4 h-4 text-indigo-400" />
                       </div>
                       <h4 className="font-semibold text-sm text-white tracking-tight">{t.explanation}</h4>
                     </div>
@@ -457,7 +457,7 @@ export function QuestionListItem({ data, index, onClick, lang }: { data: Questio
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05 }}
       onClick={onClick}
-      className="group hover:bg-white/5 border border-white/10 hover:border-white/20 p-3.5 rounded-xl cursor-pointer transition-all duration-300 flex items-center justify-between shadow-lg backdrop-blur-2xl liquid-panel"
+      className="group hover:bg-white/5 border border-white/10 hover:border-white/20 p-3.5 rounded-xl cursor-pointer transition-all duration-300 flex items-center justify-between shadow-lg bg-zinc-900/80 backdrop-blur-2xl"
     >
       <div className="flex items-center gap-3 overflow-hidden">
         <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-zinc-400 text-sm font-bold group-hover:bg-white group-hover:text-black transition-colors shrink-0">

@@ -5,7 +5,7 @@ import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import rehypeKatex from 'rehype-katex';
-import { Upload, Copy, Check, FileImage, Loader2, Trash2, AlertCircle, Camera, ArrowLeft, Info, BookOpen, ChevronRight, MessageCircle, Mic, Send, ChevronLeft, Maximize2, X, Book, FileText, Headphones, LineChart, Plus, Edit2, Palette, Globe, Keyboard, ImageIcon, RefreshCw, Clock, Folder, LogIn, LogOut, PenTool, HelpCircle, Beaker, Eye, EyeOff, Eraser, Sparkles } from 'lucide-react';
+import { Upload, Copy, Check, FileImage, Loader2, Trash2, AlertCircle, Camera, ArrowLeft, Info, BookOpen, ChevronRight, MessageCircle, Mic, Send, ChevronLeft, Maximize2, X, Book, FileText, Headphones, LineChart, Plus, Edit2, Palette, Globe, Keyboard, ImageIcon, RefreshCw, Clock, Folder, LogIn, LogOut, PenTool, HelpCircle, Beaker, Eye, EyeOff, Eraser, Sparkles, Settings } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { InlineMath } from 'react-katex';
 
@@ -15,30 +15,33 @@ import { db, auth } from './firebase';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User } from 'firebase/auth';
 import * as math from 'mathjs';
 import { formatContent } from './utils/formatUtils';
+import { extractFunctionsFromImage, GraphScanMode } from './services/graphService';
+import { getDocs, collection } from 'firebase/firestore';
 import 'github-markdown-css/github-markdown-dark.css';
 
 // Lazy load heavy components
-const AudioTutorView = lazy(() => import('./components/AudioTutor').then(m => ({ default: m.AudioTutorView })));
-const ReadingCoach = lazy(() => import('./components/ReadingCoach').then(m => ({ default: m.ReadingCoach })));
-const GraphView = lazy(() => import('./components/GraphView'));
-const MaterialAssistant = lazy(() => import('./components/MaterialAssistant').then(m => ({ default: m.MaterialAssistant })));
-const EssayFeedback = lazy(() => import('./components/EssayFeedback').then(m => ({ default: m.EssayFeedback })));
-const ZhangJingyangMode = lazy(() => import('./components/ZhangJingyangMode').then(m => ({ default: m.ZhangJingyangMode })));
-const OrganicChemistryMode = lazy(() => import('./components/OrganicChemistryMode').then(m => ({ default: m.OrganicChemistryMode })));
-const DinoGame = lazy(() => import('./components/DinoGame').then(m => ({ default: m.DinoGame })));
-const MathKeyboard = lazy(() => import('./components/MathKeyboard'));
-const HistoryDrawer = lazy(() => import('./components/HistoryDrawer').then(m => ({ default: m.HistoryDrawer })));
-const UserGuideModal = lazy(() => import('./components/UserGuideModal').then(m => ({ default: m.UserGuideModal })));
-const TextbookManager = lazy(() => import('./components/TextbookManager').then(m => ({ default: m.TextbookManager })));
-const ChatBox = lazy(() => import('./components/ChatBox').then(m => ({ default: m.ChatBox })));
-const QuestionDetail = lazy(() => import('./components/QuestionDetail').then(m => ({ default: m.QuestionDetail })));
-const QuestionListItem = lazy(() => import('./components/QuestionDetail').then(m => ({ default: m.QuestionListItem })));
-const BackgroundLines = lazy(() => import('./components/Backgrounds').then(m => ({ default: m.BackgroundLines })));
-const BackgroundBubbles = lazy(() => import('./components/Backgrounds').then(m => ({ default: m.BackgroundBubbles })));
+const AudioTutorView = lazy(() => import('@/src/components/AudioTutor').then(m => ({ default: m.AudioTutorView })));
+const ReadingCoach = lazy(() => import('@/src/components/ReadingCoach').then(m => ({ default: m.ReadingCoach })));
+const GraphView = lazy(() => import('@/src/components/GraphView'));
+const MaterialAssistant = lazy(() => import('@/src/components/MaterialAssistant').then(m => ({ default: m.MaterialAssistant })));
+const EssayFeedback = lazy(() => import('@/src/components/EssayFeedback').then(m => ({ default: m.EssayFeedback })));
+const ZhangJingyangMode = lazy(() => import('@/src/components/ZhangJingyangMode').then(m => ({ default: m.ZhangJingyangMode })));
+const OrganicChemistryMode = lazy(() => import('@/src/components/OrganicChemistryMode').then(m => ({ default: m.OrganicChemistryMode })));
+const DinoGame = lazy(() => import('@/src/components/DinoGame').then(m => ({ default: m.DinoGame })));
+const MathKeyboard = lazy(() => import('@/src/components/MathKeyboard'));
+const HistoryDrawer = lazy(() => import('@/src/components/HistoryDrawer').then(m => ({ default: m.HistoryDrawer })));
+const UserGuideModal = lazy(() => import('@/src/components/UserGuideModal').then(m => ({ default: m.UserGuideModal })));
+const TextbookManager = lazy(() => import('@/src/components/TextbookManager').then(m => ({ default: m.TextbookManager })));
+const ChatBox = lazy(() => import('@/src/components/ChatBox').then(m => ({ default: m.ChatBox })));
+const QuestionDetail = lazy(() => import('@/src/components/QuestionDetail').then(m => ({ default: m.QuestionDetail })));
+const QuestionListItem = lazy(() => import('@/src/components/QuestionDetail').then(m => ({ default: m.QuestionListItem })));
+const BackgroundLines = lazy(() => import('@/src/components/Backgrounds').then(m => ({ default: m.BackgroundLines })));
+const BackgroundBubbles = lazy(() => import('@/src/components/Backgrounds').then(m => ({ default: m.BackgroundBubbles })));
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 interface QuestionData {
+  summary: string;
   question: string;
   answer: string;
   explanation: string;
@@ -66,6 +69,7 @@ export default function App() {
   const [clearKey, setClearKey] = useState(0);
   const [theme, setTheme] = useState<'none' | 'lines' | 'bubbles'>('lines');
   const [showThemeMenu, setShowThemeMenu] = useState(false);
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
 
   const adminEmail = 'abc15210656197@gmail.com';
   const isAdmin = user?.email === adminEmail;
@@ -859,25 +863,97 @@ CRITICAL INSTRUCTIONS:
 
   if (!isAppReady || isAuthLoading) {
     return (
-      <div className="fixed inset-0 bg-zinc-950 flex flex-col items-center justify-center z-[9999]">
+      <div className="fixed inset-0 bg-zinc-950 flex flex-col items-center justify-center z-[9999] overflow-hidden">
+        {/* Animated Background Elements */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <motion.div
+            animate={{
+              scale: [1, 1.2, 1],
+              opacity: [0.1, 0.2, 0.1],
+              rotate: [0, 90, 0],
+            }}
+            transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+            className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-radial from-white/10 to-transparent blur-3xl"
+          />
+          <motion.div
+            animate={{
+              scale: [1.2, 1, 1.2],
+              opacity: [0.1, 0.15, 0.1],
+              rotate: [0, -90, 0],
+            }}
+            transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
+            className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-gradient-radial from-white/10 to-transparent blur-3xl"
+          />
+        </div>
+
         <motion.div 
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="flex flex-col items-center"
+          initial={{ scale: 0.9, opacity: 0, y: 20 }}
+          animate={{ scale: 1, opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+          className="flex flex-col items-center relative z-10"
         >
-          <div className="w-20 h-20 rounded-3xl bg-white/10 border border-white/20 flex items-center justify-center mb-6 shadow-2xl relative overflow-hidden">
-            <motion.div 
-              animate={{ rotate: 360 }}
-              transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
-              className="absolute inset-0 bg-gradient-to-tr from-emerald-500/20 via-transparent to-blue-500/20"
+          <div className="relative mb-8">
+            <motion.div
+              animate={{
+                scale: [1, 1.1, 1],
+                opacity: [0.3, 0.6, 0.3],
+              }}
+              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+              className="absolute inset-0 bg-white/20 blur-2xl rounded-full"
             />
-            <Sparkles className="w-10 h-10 text-white relative z-10" />
+            <div className="w-24 h-24 rounded-[2rem] bg-white/5 border border-white/10 flex items-center justify-center shadow-[0_0_50px_rgba(255,255,255,0.1)] relative overflow-hidden backdrop-blur-sm">
+              <motion.div 
+                animate={{ rotate: 360 }}
+                transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+                className="absolute inset-0 bg-gradient-to-tr from-white/10 via-transparent to-white/10"
+              />
+              <Sparkles className="w-12 h-12 text-white relative z-10 drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]" />
+            </div>
           </div>
-          <h1 className="text-2xl font-black text-white tracking-tighter mb-2">作业帮手 Pro</h1>
-          <div className="flex items-center gap-2 text-zinc-500 text-sm font-medium">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            <span>智能学习助手正在启动...</span>
-          </div>
+
+          <motion.h1 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3, duration: 0.5 }}
+            className="text-4xl font-black text-white tracking-tighter mb-4 bg-clip-text text-transparent bg-gradient-to-b from-white to-white/40"
+          >
+            作业帮手 Pro
+          </motion.h1>
+
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.6, duration: 0.5 }}
+            className="flex flex-col items-center gap-4"
+          >
+            <div className="flex items-center gap-3 text-zinc-400 text-sm font-medium tracking-widest uppercase">
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+              >
+                <Loader2 className="w-4 h-4" />
+              </motion.div>
+              <span>Initializing Intelligence</span>
+            </div>
+            
+            <div className="w-48 h-1 bg-white/5 rounded-full overflow-hidden relative">
+              <motion.div
+                initial={{ x: "-100%" }}
+                animate={{ x: "100%" }}
+                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent"
+              />
+            </div>
+          </motion.div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 0.4 }}
+          transition={{ delay: 1, duration: 1 }}
+          className="absolute bottom-12 text-[10px] text-zinc-500 font-mono tracking-[0.2em] uppercase"
+        >
+          Powered by Gemini 3.1 Pro
         </motion.div>
       </div>
     );
@@ -893,7 +969,7 @@ CRITICAL INSTRUCTIONS:
         {theme === 'lines' && <BackgroundLines />}
         {theme === 'bubbles' && <BackgroundBubbles />}
         <div className={`max-w-4xl mx-auto px-4 py-4 md:py-8 relative z-10 flex-1 flex flex-col w-full`}>
-        <div className="flex justify-between items-center gap-3 mb-4">
+        <div className="flex justify-between items-start mb-4">
           <div className="flex items-center gap-3">
             <button
               onClick={handleClearCurrentFeature}
@@ -903,125 +979,154 @@ CRITICAL INSTRUCTIONS:
               <Trash2 className="w-4 h-4" />
               {language === 'zh' ? '清空' : 'Clear'}
             </button>
-            
-            <div className="relative">
+          </div>
+          
+          <div className="flex flex-col items-end gap-2 relative">
+            <div className="flex items-center gap-3">
               <button 
-                onClick={() => setShowThemeMenu(!showThemeMenu)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-xs text-zinc-300 transition-colors h-8 ${showThemeMenu ? 'bg-white/10 border-white/20' : ''}`}
+                onClick={() => setShowSettingsMenu(!showSettingsMenu)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition-all duration-300 h-8 shadow-lg ${
+                  showSettingsMenu 
+                    ? 'bg-white/20 text-white border-white/30 ring-2 ring-white/10' 
+                    : 'bg-white/5 hover:bg-white/10 border border-white/10 text-zinc-300 hover:text-white'
+                }`}
               >
-                <Palette className="w-4 h-4" />
-                {language === 'zh' ? '主题' : 'Theme'}
+                <Settings className={`w-4 h-4 transition-transform duration-500 ${showSettingsMenu ? 'rotate-90' : ''}`} />
+                {language === 'zh' ? '设置' : 'Settings'}
               </button>
-              <AnimatePresence>
-                {showThemeMenu && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setShowThemeMenu(false)} />
-                    <motion.div 
-                      initial={{ opacity: 0, y: 5, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 5, scale: 0.95 }}
-                      transition={{ duration: 0.15 }}
-                      className="absolute left-0 top-full mt-2 w-32 bg-zinc-900/90 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50"
+              {user ? (
+                <div className="relative">
+                  <button 
+                    onClick={() => setShowUserMenu(!showUserMenu)}
+                    className="flex items-center gap-2 focus:outline-none"
+                  >
+                    {user.photoURL ? (
+                      <img 
+                        src={user.photoURL} 
+                        alt={user.displayName || 'User'} 
+                        className="w-8 h-8 rounded-full border border-white/20 hover:border-white/40 transition-colors object-cover"
+                        referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                          (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                        }}
+                      />
+                    ) : null}
+                    <div className={`w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-white font-bold text-sm border border-white/20 ${user.photoURL ? 'hidden' : ''}`}>
+                      {user.displayName ? user.displayName.charAt(0).toUpperCase() : (user.email ? user.email.charAt(0).toUpperCase() : 'U')}
+                    </div>
+                  </button>
+                  
+                  <AnimatePresence>
+                    {showUserMenu && (
+                      <>
+                        <div 
+                          className="fixed inset-0 z-40" 
+                          onClick={() => setShowUserMenu(false)}
+                        />
+                        <motion.div
+                          initial={{ opacity: 0, y: 5, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 5, scale: 0.95 }}
+                          transition={{ duration: 0.15 }}
+                          className="absolute right-0 top-full mt-2 w-28 bg-zinc-900/90 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50"
+                        >
+                          <button
+                            onClick={() => {
+                              setShowUserMenu(false);
+                              handleLogout();
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+                          >
+                            <LogOut className="w-4 h-4" />
+                            {language === 'zh' ? '注销' : 'Logout'}
+                          </button>
+                        </motion.div>
+                      </>
+                    )}
+                  </AnimatePresence>
+                </div>
+              ) : (
+                <button
+                  onClick={handleLogin}
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-xs text-zinc-300 transition-colors h-8"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  {language === 'zh' ? '登录' : 'Login'}
+                </button>
+              )}
+            </div>
+            
+            <AnimatePresence>
+              {showSettingsMenu && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowSettingsMenu(false)} />
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                    className="absolute right-0 top-full mt-2 border border-white/10 rounded-2xl p-3 bg-zinc-900/95 backdrop-blur-2xl flex flex-col gap-2.5 z-50 w-48 shadow-2xl"
+                  >
+                    <div className="text-[10px] uppercase tracking-widest text-zinc-500 px-1 font-bold">{language === 'zh' ? '语言' : 'Language'}</div>
+                    <div 
+                      className="flex items-center bg-white/5 border border-white/10 rounded-xl p-1 cursor-pointer relative w-full h-8 select-none group hover:border-white/20 transition-colors"
+                      onClick={() => setLanguage(prev => prev === 'zh' ? 'en' : 'zh')}
                     >
-                      <button onClick={() => { setTheme('none'); setShowThemeMenu(false); }} className={`w-full text-left px-3 py-2 text-xs hover:bg-white/10 ${theme === 'none' ? 'text-emerald-400' : 'text-zinc-300'}`}>
+                      <motion.div
+                        className="absolute inset-y-1 left-1 bg-white/10 border border-white/20 rounded-lg shadow-inner"
+                        initial={false}
+                        animate={{ 
+                          x: language === 'zh' ? '0%' : '100%',
+                          width: 'calc(50% - 4px)'
+                        }}
+                        transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                      />
+                      <div className={`flex-1 text-center text-xs font-bold z-10 transition-colors duration-300 ${language === 'zh' ? 'text-white' : 'text-zinc-500'}`}>
+                        中
+                      </div>
+                      <div className={`flex-1 text-center text-xs font-bold z-10 transition-colors duration-300 ${language === 'en' ? 'text-white' : 'text-zinc-500'}`}>
+                        EN
+                      </div>
+                    </div>
+                    
+                    <div className="text-[10px] uppercase tracking-widest text-zinc-500 px-1 mt-1 font-bold">{language === 'zh' ? '主题' : 'Theme'}</div>
+                    <div className="grid grid-cols-1 gap-1">
+                      <button onClick={() => { setTheme('none'); setShowSettingsMenu(false); }} className={`w-full text-left px-3 py-2 text-xs rounded-xl transition-all ${theme === 'none' ? 'bg-white/10 text-white font-bold' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}>
                         {language === 'zh' ? '无 (纯黑)' : 'None (Black)'}
                       </button>
-                      <button onClick={() => { setTheme('lines'); setShowThemeMenu(false); }} className={`w-full text-left px-3 py-2 text-xs hover:bg-white/10 ${theme === 'lines' ? 'text-emerald-400' : 'text-zinc-300'}`}>
+                      <button onClick={() => { setTheme('lines'); setShowSettingsMenu(false); }} className={`w-full text-left px-3 py-2 text-xs rounded-xl transition-all ${theme === 'lines' ? 'bg-white/10 text-white font-bold' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}>
                         {language === 'zh' ? '流动线条' : 'Flowing Lines'}
                       </button>
-                      <button onClick={() => { setTheme('bubbles'); setShowThemeMenu(false); }} className={`w-full text-left px-3 py-2 text-xs hover:bg-white/10 ${theme === 'bubbles' ? 'text-emerald-400' : 'text-zinc-300'}`}>
+                      <button onClick={() => { setTheme('bubbles'); setShowSettingsMenu(false); }} className={`w-full text-left px-3 py-2 text-xs rounded-xl transition-all ${theme === 'bubbles' ? 'bg-white/10 text-white font-bold' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}>
                         {language === 'zh' ? '空灵气泡' : 'Ethereal Bubbles'}
                       </button>
-                    </motion.div>
-                  </>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-          {user ? (
-            <div className="relative">
-              <button 
-                onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center gap-2 focus:outline-none"
-              >
-                {user.photoURL && <img src={user.photoURL} alt={user.displayName || ''} className="w-6 h-6 rounded-full border border-white/20 hover:border-white/40 transition-colors" />}
-              </button>
-              
-              <AnimatePresence>
-                {showUserMenu && (
-                  <>
-                    <div 
-                      className="fixed inset-0 z-40" 
-                      onClick={() => setShowUserMenu(false)}
-                    />
-                    <motion.div
-                      initial={{ opacity: 0, y: 5, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 5, scale: 0.95 }}
-                      transition={{ duration: 0.15 }}
-                      className="absolute right-0 top-full mt-2 w-28 bg-zinc-900/90 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50"
-                    >
+                    </div>
+
+                    <div className="h-px bg-white/10 my-1" />
+                    <div className="grid grid-cols-1 gap-1">
                       <button
-                        onClick={() => {
-                          setShowUserMenu(false);
-                          handleLogout();
-                        }}
-                        className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+                        onClick={() => { setIsUserGuideOpen(true); setShowSettingsMenu(false); }}
+                        className="flex items-center gap-2 px-3 py-2 hover:bg-white/5 rounded-xl text-xs text-zinc-400 hover:text-zinc-200 transition-all"
                       >
-                        <LogOut className="w-4 h-4" />
-                        {language === 'zh' ? '注销' : 'Logout'}
+                        <HelpCircle className="w-4 h-4" />
+                        {language === 'zh' ? '使用指引' : 'Guide'}
                       </button>
-                    </motion.div>
-                  </>
-                )}
-              </AnimatePresence>
-            </div>
-          ) : (
-            <button
-              onClick={handleLogin}
-              className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-xs text-zinc-300 transition-colors h-6"
-            >
-              <LogIn className="w-3.5 h-3.5" />
-              {language === 'zh' ? '登录' : 'Login'}
-            </button>
-          )}
-          <button
-            onClick={() => setIsHistoryOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-xs text-zinc-300 transition-colors h-6"
-          >
-            <Clock className="w-3.5 h-3.5" />
-            {language === 'zh' ? '历史' : 'History'}
-          </button>
-          <button
-            onClick={() => setIsUserGuideOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-xs text-zinc-300 transition-colors h-6"
-          >
-            <HelpCircle className="w-3.5 h-3.5" />
-            {language === 'zh' ? '使用指引' : 'Guide'}
-          </button>
-          <div 
-            className="flex items-center bg-white/5 border border-white/10 rounded-full p-0.5 cursor-pointer relative w-[64px] h-6 select-none group hover:border-white/20 transition-colors"
-            onClick={() => setLanguage(prev => prev === 'zh' ? 'en' : 'zh')}
-          >
-            <motion.div
-              className="absolute inset-y-0.5 bg-white/10 border border-white/20 rounded-full shadow-inner"
-              initial={false}
-              animate={{ 
-                x: language === 'zh' ? 0 : 30,
-                width: 30
-              }}
-              transition={{ type: "spring", stiffness: 500, damping: 35 }}
-            />
-            <div className={`flex-1 text-center text-[9px] font-black z-10 transition-colors duration-300 ${language === 'zh' ? 'text-white' : 'text-zinc-500'}`}>
-              中
-            </div>
-            <div className={`flex-1 text-center text-[9px] font-black z-10 transition-colors duration-300 ${language === 'en' ? 'text-white' : 'text-zinc-500'}`}>
-              EN
-            </div>
+                      <button
+                        onClick={() => { setIsHistoryOpen(true); setShowSettingsMenu(false); }}
+                        className="flex items-center gap-2 px-3 py-2 hover:bg-white/5 rounded-xl text-xs text-zinc-400 hover:text-zinc-200 transition-all"
+                      >
+                        <Clock className="w-4 h-4" />
+                        {language === 'zh' ? '历史记录' : 'History'}
+                      </button>
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
           </div>
         </div>
-        </div>
+
         <header className="mb-4 text-center p-3 md:p-4 rounded-2xl border border-white/10 backdrop-blur-2xl shadow-2xl relative shrink-0 liquid-panel">
           <motion.h1 
             initial={{ opacity: 0, y: -20 }}
@@ -1733,7 +1838,7 @@ CRITICAL INSTRUCTIONS:
               transition={{ duration: 0.3 }}
               className="flex-1 flex flex-col"
             >
-              <div className="flex-1 min-h-0 bg-zinc-900/50 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden shadow-2xl liquid-panel">
+              <div className="flex-1 min-h-0 bg-black/40 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
                 <ZhangJingyangMode 
                   key={clearKey}
                   lang={language} 
@@ -1751,7 +1856,7 @@ CRITICAL INSTRUCTIONS:
               transition={{ duration: 0.3 }}
               className="flex-1 flex flex-col"
             >
-              <div className="flex-1 min-h-0 bg-zinc-900/50 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden shadow-2xl liquid-panel">
+              <div className="flex-1 min-h-0 bg-black/40 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
                 <OrganicChemistryMode 
                   key={clearKey}
                   lang={language} 

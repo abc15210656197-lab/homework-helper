@@ -252,7 +252,7 @@ const MarkdownComponents = (lang: 'zh' | 'en', onRegenerateSvg?: (svgCode: strin
             className="absolute top-2 right-2 p-2 bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all flex items-center gap-1.5 text-[10px] font-medium z-10"
             title={t.organicModeCopySvg}
           >
-            {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+            {copied ? <Check className="w-3 h-3 text-indigo-500" /> : <Copy className="w-3 h-3" />}
             {copied ? t.copied : t.organicModeCopySvg}
           </button>
           <div 
@@ -289,51 +289,7 @@ const MarkdownComponents = (lang: 'zh' | 'en', onRegenerateSvg?: (svgCode: strin
   }
 });
 
-const CLASS_MEMBERS = [
-  "包涵", "陈明见", "崔天浩", "段柯言", "房奥洋", "冯子夏", "高嘉怡", "郭晗阳", "顾雨晴", 
-  "郝天一", "和诗涵", "黄采薇", "贾灵坤", "姜亦铭", "姜雨彤", "金孟源", "李嘉桐", "刘玟言", 
-  "刘雅菲", "刘梓涵", "牛思程", "唐子渔", "王若熹", "温凯翔", "闻钰翔", "吴琬琳", "薛云朗", 
-  "徐望童", "叶瑾宸", "尤子谦", "查俊祺", "张景洋", "张祎辰", "赵思源", "邹韫瞳"
-];
-
-const Danmaku = () => {
-  const [items, setItems] = useState<{ id: number; name: string; top: number; duration: number; delay: number }[]>([]);
-
-  useEffect(() => {
-    const newItems = Array.from({ length: 20 }).map((_, i) => ({
-      id: i,
-      name: CLASS_MEMBERS[Math.floor(Math.random() * CLASS_MEMBERS.length)],
-      top: Math.random() * 80 + 10, // 10% to 90% height
-      duration: Math.random() * 10 + 10, // 10s to 20s
-      delay: Math.random() * 10
-    }));
-    setItems(newItems);
-  }, []);
-
-  return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 opacity-40">
-      {items.map((item) => (
-        <motion.div
-          key={item.id}
-          initial={{ x: '100vw' }}
-          animate={{ x: '-20vw' }}
-          transition={{
-            duration: item.duration,
-            repeat: Infinity,
-            ease: "linear",
-            delay: item.delay
-          }}
-          className="absolute whitespace-nowrap text-white font-bold text-lg md:text-2xl tracking-widest drop-shadow-lg"
-          style={{ top: `${item.top}%` }}
-        >
-          {item.name}
-        </motion.div>
-      ))}
-    </div>
-  );
-};
-
-export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData, onBack }: { lang: 'zh' | 'en', model: string, onSaveHistory: (mode: string, summary: string, data: any) => void, initialData?: any, onBack?: () => void }) {
+export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData }: { lang: 'zh' | 'en', model: string, onSaveHistory: (mode: string, summary: string, data: any) => void, initialData?: any }) {
   const t = TRANSLATIONS[lang];
   const [messages, setMessages] = useState<{role: 'user'|'model', text: string, images?: string[]}[]>(initialData?.messages || []);
   
@@ -367,6 +323,18 @@ export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData, 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
+
+  // Auto-sliding disabled per user request
+  /*
+  useEffect(() => {
+    if (isTyping && messages.length >= 2) {
+      const interval = setInterval(() => {
+        setCurrentKnowledgeIndex(prev => (prev + 1) % CHEMISTRY_KNOWLEDGE[lang].length);
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [isTyping, messages.length, lang]);
+  */
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -479,21 +447,8 @@ export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData, 
   const isGeneratingAnalysis = isTyping && messages.length >= 2;
 
   return (
-    <div className="fixed inset-0 z-[150] bg-zinc-950 text-white overflow-hidden flex flex-col">
-      {/* Global Danmaku Background */}
-      <Danmaku />
+    <div className="flex flex-col h-full bg-transparent text-white overflow-hidden relative">
       
-      {/* Top Left Back Button */}
-      <div className="absolute top-6 left-6 z-[200]">
-        <button 
-          onClick={onBack}
-          className="p-3 bg-white/10 hover:bg-white/20 border border-white/10 rounded-2xl transition-all active:scale-95 flex items-center gap-2 backdrop-blur-md"
-        >
-          <ChevronLeft className="w-6 h-6" />
-          <span className="font-bold hidden md:inline">返回</span>
-        </button>
-      </div>
-
       {/* Full-screen waiting overlay */}
       <AnimatePresence>
         {isGeneratingAnalysis && (
@@ -501,95 +456,91 @@ export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData, 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 z-[180] bg-blue-950/95 backdrop-blur-xl flex flex-col items-center justify-center p-8"
+            className="absolute inset-0 z-50 bg-zinc-950/90 backdrop-blur-2xl flex flex-col items-center justify-center p-8"
           >
-            <Loader2 className="w-16 h-16 animate-spin text-blue-400 mb-8" />
+            <Loader2 className="w-16 h-16 animate-spin text-white mb-8" />
             <h2 className="text-2xl font-bold text-white mb-2">
               {lang === 'zh' ? '正在深度解析机理与绘制结构式...' : 'Analyzing mechanism and drawing structures...'}
             </h2>
-            <p className="text-zinc-400 mb-12 text-center">
+            <p className="text-zinc-400 mb-12">
               {lang === 'zh' ? '生成高质量的 SVG 结构式需要一些时间，请稍候。' : 'Generating high-quality SVG structures takes some time, please wait.'}
             </p>
 
-            <div className="max-w-4xl w-full bg-gradient-to-br from-blue-900 to-blue-600 border border-white/20 rounded-[2.5rem] p-10 relative overflow-hidden shadow-[0_40px_80px_rgba(0,0,0,0.5)]">
-              {/* Danmaku Layer */}
-              <Danmaku />
+            <div className="max-w-4xl w-full bg-zinc-900/50 border border-white/10 rounded-3xl p-8 relative overflow-hidden backdrop-blur-md shadow-2xl">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-white/0 via-white to-white/0 opacity-50"></div>
+              <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2 uppercase tracking-wider">
+                <Beaker className="w-4 h-4" />
+                {lang === 'zh' ? '等待期间复习一下：' : 'Review while waiting:'}
+              </h3>
+              
+              <div className="flex items-center gap-4">
+                <button 
+                  onClick={() => setCurrentKnowledgeIndex(prev => (prev - 1 + CHEMISTRY_KNOWLEDGE[lang].length) % CHEMISTRY_KNOWLEDGE[lang].length)}
+                  className="p-2 hover:bg-white/10 rounded-full transition-colors text-white/40 hover:text-white"
+                >
+                  <ChevronLeft className="w-6 h-6" />
+                </button>
 
-              <div className="relative z-10">
-                <h3 className="text-sm font-bold text-white/80 mb-6 flex items-center gap-2 uppercase tracking-widest">
-                  <Beaker className="w-5 h-5" />
-                  {lang === 'zh' ? '等待期间复习一下：' : 'Review while waiting:'}
-                </h3>
-                
-                <div className="flex items-center gap-8">
-                  <button 
-                    onClick={() => setCurrentKnowledgeIndex(prev => (prev - 1 + CHEMISTRY_KNOWLEDGE[lang].length) % CHEMISTRY_KNOWLEDGE[lang].length)}
-                    className="p-3 hover:bg-white/10 rounded-full transition-colors text-white/40 hover:text-white shrink-0"
-                  >
-                    <ChevronLeft className="w-10 h-10" />
-                  </button>
-
-                  <div className="flex-1 min-h-[220px] flex flex-col justify-center">
-                    <AnimatePresence mode="wait">
-                      <motion.div
-                        key={currentKnowledgeIndex}
-                        initial={{ opacity: 0, x: 30 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -30 }}
-                        transition={{ duration: 0.4, ease: "easeOut" }}
-                      >
-                        <h4 className="text-3xl font-black text-white mb-6 tracking-tight">
-                          {CHEMISTRY_KNOWLEDGE[lang][currentKnowledgeIndex].title}
-                        </h4>
-                        <div className="text-white/90 leading-relaxed markdown-body prose prose-invert prose-lg max-w-none font-medium">
-                          <ReactMarkdown 
-                            remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} 
-                            rehypePlugins={[rehypeKatex]}
-                          >
-                            {CHEMISTRY_KNOWLEDGE[lang][currentKnowledgeIndex].content}
-                          </ReactMarkdown>
-                        </div>
-                      </motion.div>
-                    </AnimatePresence>
-                  </div>
-
-                  <button 
-                    onClick={() => setCurrentKnowledgeIndex(prev => (prev + 1) % CHEMISTRY_KNOWLEDGE[lang].length)}
-                    className="p-3 hover:bg-white/10 rounded-full transition-colors text-white/40 hover:text-white shrink-0"
-                  >
-                    <ChevronRight className="w-10 h-10" />
-                  </button>
+                <div className="flex-1 min-h-[160px]">
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={currentKnowledgeIndex}
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <h4 className="text-lg font-bold text-white mb-2">
+                        {CHEMISTRY_KNOWLEDGE[lang][currentKnowledgeIndex].title}
+                      </h4>
+                      <div className="text-zinc-300 leading-relaxed markdown-body prose prose-invert prose-base max-w-none">
+                        <ReactMarkdown 
+                          remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} 
+                          rehypePlugins={[rehypeKatex]}
+                        >
+                          {CHEMISTRY_KNOWLEDGE[lang][currentKnowledgeIndex].content}
+                        </ReactMarkdown>
+                      </div>
+                    </motion.div>
+                  </AnimatePresence>
                 </div>
-                
-                <div className="flex gap-2 mt-10 justify-center">
-                  {CHEMISTRY_KNOWLEDGE[lang].map((_, idx) => (
-                    <div 
-                      key={idx} 
-                      className={`h-2 rounded-full transition-all duration-500 ${idx === currentKnowledgeIndex ? 'w-10 bg-white' : 'w-2 bg-white/20'}`}
-                    />
-                  ))}
-                </div>
+
+                <button 
+                  onClick={() => setCurrentKnowledgeIndex(prev => (prev + 1) % CHEMISTRY_KNOWLEDGE[lang].length)}
+                  className="p-2 hover:bg-white/10 rounded-full transition-colors text-white/40 hover:text-white"
+                >
+                  <ChevronRight className="w-6 h-6" />
+                </button>
+              </div>
+              
+              <div className="flex gap-1.5 mt-6 justify-center">
+                {CHEMISTRY_KNOWLEDGE[lang].map((_, idx) => (
+                  <div 
+                    key={idx} 
+                    className={`h-1.5 rounded-full transition-all duration-300 ${idx === currentKnowledgeIndex ? 'w-6 bg-white shadow-[0_0_8px_rgba(255,255,255,0.5)]' : 'w-1.5 bg-white/20'}`}
+                  />
+                ))}
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className="flex-1 overflow-y-auto p-6 pt-24 max-w-5xl mx-auto w-full flex flex-col relative z-10">
-        <div className="mb-12 text-center flex flex-col items-center relative">
-          <div className="flex items-center gap-4 mb-4">
-            <h2 className="text-5xl font-black text-white flex items-center gap-4 tracking-tighter">
-              <Beaker className="w-12 h-12 text-blue-400" />
+      <div className="flex-1 overflow-y-auto p-6 pt-10 max-w-4xl mx-auto w-full flex flex-col">
+        <div className="mb-8 text-center flex flex-col items-center relative">
+          <div className="flex items-center gap-3 mb-2">
+            <h2 className="text-3xl font-bold text-white flex items-center gap-2">
+              <Beaker className="w-8 h-8 text-white" />
               {t.organicModeTitle}
             </h2>
             <button 
               onClick={() => setShowHelp(!showHelp)}
-              className="p-2 text-zinc-500 hover:text-white transition-colors"
+              className="p-1.5 text-zinc-500 hover:text-white transition-colors"
             >
-              <HelpCircle className="w-6 h-6" />
+              <HelpCircle className="w-5 h-5" />
             </button>
           </div>
-          <p className="text-white/40 text-xl font-medium italic tracking-wide">{t.organicModeSubtitle}</p>
+          <p className="text-white/60 mb-4 italic">{t.organicModeSubtitle}</p>
 
           <AnimatePresence>
             {showHelp && (
@@ -597,13 +548,13 @@ export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData, 
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                className="w-full max-w-lg bg-white/5 border border-white/10 rounded-3xl p-6 mt-8 text-left overflow-hidden shadow-2xl"
+                className="w-full max-w-md bg-zinc-900/50 border border-white/10 rounded-2xl p-4 mb-6 text-left overflow-hidden backdrop-blur-md"
               >
-                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                  <HelpCircle className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
+                  <HelpCircle className="w-4 h-4" />
                   {t.organicModeInstructions}
                 </h3>
-                <ul className="text-sm text-zinc-400 space-y-3 list-disc list-inside">
+                <ul className="text-xs text-zinc-400 space-y-2 list-disc list-inside">
                   <li>{t.organicModeInstruction1}</li>
                   <li>{t.organicModeInstruction2}</li>
                   <li>{t.organicModeInstruction3}</li>
@@ -614,34 +565,33 @@ export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData, 
           </AnimatePresence>
         </div>
 
-        <div className="flex-1 overflow-y-auto mb-8 space-y-8 custom-scrollbar pr-4">
+        <div className="flex-1 overflow-y-auto mb-6 space-y-6 custom-scrollbar pr-2">
           {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full text-white/20 gap-12 py-20">
-              <div className="relative">
-                <div className="absolute inset-0 bg-emerald-500/20 blur-[100px] rounded-full"></div>
-                <Beaker className="w-32 h-32 text-white/10 relative z-10" />
+            <div className="flex flex-col items-center justify-center h-full text-white/30 gap-8">
+              <div className="flex flex-col items-center gap-4">
+                <Beaker className="w-12 h-12 text-white/50" />
+                <p className="text-center max-w-md">{t.organicModeEmpty}</p>
               </div>
-              <p className="text-center max-w-lg text-2xl font-bold leading-relaxed">{t.organicModeEmpty}</p>
             </div>
           )}
           
           {messages.map((msg, idx) => (
             <motion.div 
               key={idx}
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
-              <div className={`max-w-[90%] ${msg.role === 'user' ? 'bg-white text-black' : 'bg-zinc-900 border border-zinc-800 text-zinc-200'} rounded-3xl p-6 shadow-xl`}>
+              <div className={`max-w-[90%] ${msg.role === 'user' ? 'bg-white text-black' : 'bg-zinc-900/60 border border-white/10 backdrop-blur-md text-zinc-200'} rounded-2xl p-4 shadow-xl`}>
                 {msg.images && msg.images.length > 0 && (
-                  <div className="flex flex-wrap gap-3 mb-4">
+                  <div className="flex flex-wrap gap-2 mb-3">
                     {msg.images.map((img, i) => (
-                      <img key={i} src={img} alt="Uploaded problem" className="max-w-[300px] max-h-[300px] rounded-2xl border border-white/10 object-contain bg-zinc-950 shadow-inner" />
+                      <img key={i} src={img} alt="Uploaded problem" className="max-w-[200px] max-h-[200px] rounded-lg border border-white/20 object-contain bg-zinc-950" />
                     ))}
                   </div>
                 )}
                 {msg.role === 'model' ? (
-                  <div className="markdown-body prose prose-invert max-w-none prose-pre:bg-zinc-950 prose-pre:border prose-pre:border-zinc-800 prose-lg">
+                  <div className="markdown-body prose prose-invert max-w-none prose-pre:bg-zinc-950 prose-pre:border prose-pre:border-zinc-800">
                     <ReactMarkdown 
                       remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]} 
                       rehypePlugins={[rehypeRaw, rehypeKatex]}
@@ -651,7 +601,7 @@ export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData, 
                     </ReactMarkdown>
                   </div>
                 ) : (
-                  msg.text && <p className="whitespace-pre-wrap text-lg font-medium">{msg.text}</p>
+                  msg.text && <p className="whitespace-pre-wrap">{msg.text}</p>
                 )}
               </div>
             </motion.div>
@@ -663,9 +613,9 @@ export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData, 
               animate={{ opacity: 1 }}
               className="flex justify-start"
             >
-              <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 flex items-center gap-4 shadow-xl">
-                <Loader2 className="w-6 h-6 animate-spin text-emerald-400" />
-                <span className="text-lg font-medium text-zinc-400">
+              <div className="bg-zinc-900/60 border border-white/10 backdrop-blur-md rounded-2xl p-4 flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin text-white" />
+                <span className="text-sm text-zinc-400">
                   {lang === 'zh' ? '正在思考...' : 'Thinking...'}
                 </span>
               </div>
@@ -674,14 +624,14 @@ export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData, 
           <div ref={chatEndRef} />
         </div>
 
-        <div className="relative max-w-4xl mx-auto w-full pb-10">
-          <div className="flex flex-wrap gap-3 mb-6">
+        <div className="relative max-w-3xl mx-auto w-full">
+          <div className="flex flex-wrap gap-2 mb-4">
             {quickActions.map(action => (
               <button
                 key={action.id}
                 onClick={() => handleSend(action.text)}
                 disabled={isTyping}
-                className="px-5 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-sm font-bold text-zinc-300 hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+                className="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-xs text-zinc-300 hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed backdrop-blur-sm"
               >
                 {action.text}
               </button>
@@ -691,19 +641,19 @@ export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData, 
           <AnimatePresence>
             {selectedImages.length > 0 && (
               <motion.div 
-                initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 20, scale: 0.95 }}
-                className="absolute bottom-full mb-4 left-0 bg-zinc-800/90 backdrop-blur-md p-3 rounded-2xl border border-zinc-700 shadow-2xl flex flex-wrap gap-3 max-w-full overflow-x-auto custom-scrollbar"
+                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                className="absolute bottom-full mb-2 left-0 bg-zinc-800/80 backdrop-blur-md p-2 rounded-xl border border-zinc-700 shadow-lg flex flex-wrap gap-2 max-w-full overflow-x-auto custom-scrollbar"
               >
                 {selectedImages.map((img, idx) => (
                   <div key={idx} className="relative group shrink-0">
-                    <img src={img} alt="Selected" className="h-24 rounded-xl object-contain bg-zinc-900 border border-zinc-700" />
+                    <img src={img} alt="Selected" className="h-20 rounded-lg object-contain bg-zinc-900 border border-zinc-700" />
                     <button 
                       onClick={() => removeImage(idx)}
-                      className="absolute -top-2 -right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                      className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
                     >
-                      <X className="w-4 h-4" />
+                      <X className="w-3 h-3" />
                     </button>
                   </div>
                 ))}
@@ -711,26 +661,26 @@ export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData, 
             )}
           </AnimatePresence>
 
-          <div className="flex flex-col bg-zinc-900/80 backdrop-blur-md border border-zinc-800 rounded-[2rem] shadow-2xl focus-within:border-emerald-500/50 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all relative overflow-hidden">
+          <div className="flex flex-col bg-zinc-900/80 backdrop-blur-md border border-white/10 rounded-3xl shadow-xl focus-within:border-white/50 focus-within:ring-1 focus-within:ring-white/50 transition-all relative">
             {/* Model Selection Bar */}
-            <div className="flex items-center justify-between px-6 py-3 border-b border-zinc-800/50 bg-zinc-950/50">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-white/10 bg-zinc-950/20 rounded-t-3xl">
               <div className="relative">
                 <button
                   onClick={() => setShowModelDropdown(!showModelDropdown)}
-                  className="flex items-center gap-2 text-sm font-bold text-zinc-400 hover:text-zinc-200 transition-colors"
+                  className="flex items-center gap-1.5 text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
                 >
-                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                  <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
                   {models.find(m => m.id === activeModel)?.name || 'Model'}
-                  <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${showModelDropdown ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`w-3 h-3 transition-transform ${showModelDropdown ? 'rotate-180' : ''}`} />
                 </button>
                 
                 <AnimatePresence>
                   {showModelDropdown && (
                     <motion.div
-                      initial={{ opacity: 0, y: 10 }}
+                      initial={{ opacity: 0, y: 5 }}
                       animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 10 }}
-                      className="absolute bottom-full left-0 mb-4 w-56 bg-zinc-800 border border-zinc-700 rounded-2xl shadow-2xl overflow-hidden z-50"
+                      exit={{ opacity: 0, y: 5 }}
+                      className="absolute bottom-full left-0 mb-2 w-48 bg-zinc-800/90 backdrop-blur-md border border-zinc-700 rounded-xl shadow-xl overflow-hidden z-50"
                     >
                       {models.map(m => (
                         <button
@@ -739,7 +689,7 @@ export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData, 
                             setActiveModel(m.id);
                             setShowModelDropdown(false);
                           }}
-                          className={`w-full text-left px-5 py-3 text-sm font-medium transition-colors ${activeModel === m.id ? 'bg-emerald-500/20 text-emerald-400' : 'text-zinc-300 hover:bg-zinc-700'}`}
+                          className={`w-full text-left px-4 py-2 text-xs transition-colors ${activeModel === m.id ? 'bg-white/20 text-white' : 'text-zinc-300 hover:bg-zinc-700'}`}
                         >
                           {m.name}
                         </button>
@@ -750,7 +700,7 @@ export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData, 
               </div>
             </div>
 
-            <div className="flex items-end gap-3 p-4">
+            <div className="flex items-end gap-2 p-2 rounded-b-3xl">
               <input
                 type="file"
                 accept="image/*"
@@ -761,10 +711,10 @@ export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData, 
               />
               <button 
                 onClick={() => fileInputRef.current?.click()}
-                className="p-4 text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-2xl transition-all shrink-0 active:scale-90"
+                className="p-3 text-zinc-400 hover:text-white hover:bg-white/10 rounded-full transition-colors shrink-0"
                 title="上传题目图片"
               >
-                <ImageIcon className="w-7 h-7" />
+                <ImageIcon className="w-5 h-5" />
               </button>
               
               <textarea 
@@ -777,17 +727,17 @@ export function OrganicChemistryMode({ lang, model, onSaveHistory, initialData, 
                   }
                 }}
                 placeholder={t.organicModePlaceholder}
-                className="flex-1 bg-transparent border-none text-white text-lg focus:ring-0 outline-none resize-none py-4 px-2 max-h-48 custom-scrollbar font-medium"
+                className="flex-1 bg-transparent border-none text-white text-sm focus:ring-0 outline-none resize-none py-3 px-2 max-h-32 custom-scrollbar"
                 rows={1}
-                style={{ minHeight: '56px' }}
+                style={{ minHeight: '44px' }}
               />
               
               <button 
                 onClick={() => handleSend()}
                 disabled={(!input.trim() && selectedImages.length === 0) || isTyping}
-                className="p-4 bg-emerald-500 hover:bg-emerald-400 disabled:bg-zinc-800 disabled:text-zinc-600 text-black rounded-2xl transition-all shrink-0 shadow-lg shadow-emerald-500/20 active:scale-90"
+                className="p-3 bg-white hover:bg-zinc-200 disabled:bg-zinc-800 disabled:text-zinc-600 text-black rounded-full transition-colors shrink-0"
               >
-                <Send className="w-7 h-7" />
+                <Send className="w-5 h-5" />
               </button>
             </div>
           </div>

@@ -535,7 +535,7 @@ IMPORTANT:
                           );
                         } else if (isInaccurate) {
                           return (
-                            <span key={wIdx} className="bg-amber-500/20 text-amber-400 border-b border-amber-500/50 px-0.5 rounded">
+                            <span key={wIdx} className="bg-white/20 text-white border-b border-white/50 px-0.5 rounded">
                               {word}
                             </span>
                           );
@@ -601,7 +601,7 @@ IMPORTANT:
                       className={`w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl sm:rounded-full font-medium transition-all shadow-lg ${
                         isEvaluating
                           ? 'bg-zinc-700 text-zinc-300 cursor-wait'
-                          : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-500/20 liquid-button'
+                          : 'bg-white hover:bg-zinc-200 text-black shadow-white/20 liquid-button'
                       }`}
                     >
                       {isEvaluating ? (
@@ -621,7 +621,7 @@ IMPORTANT:
                 
                 {isEvaluating && (
                   <div className="mt-4 text-zinc-400 text-sm animate-pulse flex items-center gap-2 bg-zinc-900/50 px-4 py-2 rounded-full border border-zinc-800">
-                    <Loader2 className="w-4 h-4 animate-spin text-emerald-500" />
+                    <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />
                     {lang === 'zh' ? 'AI正在认真听您的录音，请稍候...' : 'AI is listening to your recording...'}
                   </div>
                 )}
@@ -694,17 +694,17 @@ IMPORTANT:
               {/* Evaluation Result */}
               {evaluationResult && (
                 <div className="bg-zinc-900/80 border border-zinc-700/50 rounded-xl p-6 shadow-xl backdrop-blur-sm animate-in fade-in slide-in-from-bottom-4 duration-500 relative overflow-hidden liquid-panel">
-                  <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-emerald-500 to-teal-500"></div>
+                  <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-white/50 to-white/10"></div>
                   
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-emerald-400 flex items-center gap-2">
+                    <h3 className="text-lg font-semibold text-white flex items-center gap-2">
                       <CheckCircle className="w-5 h-5" />
                       {lang === 'zh' ? 'AI 评估报告' : 'AI Evaluation Report'}
                     </h3>
                     {evaluationScore !== null && (
                       <div className="flex items-center gap-2 bg-black/20 px-3 py-1.5 rounded-lg border border-zinc-800">
                         <span className="text-sm text-zinc-400">{lang === 'zh' ? '综合评分' : 'Score'}</span>
-                        <span className={`text-xl font-bold ${evaluationScore >= 7 ? 'text-emerald-400' : evaluationScore >= 5 ? 'text-amber-400' : 'text-red-400'}`}>
+                        <span className={`text-xl font-bold ${evaluationScore >= 7 ? 'text-white' : evaluationScore >= 5 ? 'text-zinc-300' : 'text-zinc-500'}`}>
                           {evaluationScore} <span className="text-sm font-normal text-zinc-500">/ 8</span>
                         </span>
                       </div>
@@ -727,13 +727,13 @@ IMPORTANT:
                   )}
 
                   {inaccurateWords.length > 0 && (
-                    <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                      <div className="text-sm font-medium text-amber-400 mb-2">
+                    <div className="mb-4 p-3 bg-white/5 border border-white/10 rounded-lg">
+                      <div className="text-sm font-medium text-white mb-2">
                         {lang === 'zh' ? '发音不准：' : 'Inaccurate Pronunciation:'}
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {inaccurateWords.map((word, idx) => (
-                          <span key={idx} className="text-xs bg-amber-500/20 text-amber-300 px-2 py-1 rounded">
+                          <span key={idx} className="text-xs bg-white/10 text-white px-2 py-1 rounded">
                             {word}
                           </span>
                         ))}
@@ -741,7 +741,7 @@ IMPORTANT:
                     </div>
                   )}
 
-                  <div className="prose prose-invert prose-emerald max-w-none text-sm markdown-body">
+                  <div className="prose prose-invert prose-zinc max-w-none text-sm markdown-body">
                     <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
                       {formatContent(evaluationResult)}
                     </ReactMarkdown>

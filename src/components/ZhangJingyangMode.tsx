@@ -11,50 +11,6 @@ import { DinoGame } from './DinoGame';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-const CLASS_MEMBERS = [
-  "包涵", "陈明见", "崔天浩", "段柯言", "房奥洋", "冯子夏", "高嘉怡", "郭晗阳", "顾雨晴", 
-  "郝天一", "和诗涵", "黄采薇", "贾灵坤", "姜亦铭", "姜雨彤", "金孟源", "李嘉桐", "刘玟言", 
-  "刘雅菲", "刘梓涵", "牛思程", "唐子渔", "王若熹", "温凯翔", "闻钰翔", "吴琬琳", "薛云朗", 
-  "徐望童", "叶瑾宸", "尤子谦", "查俊祺", "张景洋", "张祎辰", "赵思源", "邹韫瞳"
-];
-
-const Danmaku = () => {
-  const [items, setItems] = useState<{ id: number; name: string; top: number; duration: number; delay: number }[]>([]);
-
-  useEffect(() => {
-    const newItems = Array.from({ length: 25 }).map((_, i) => ({
-      id: i,
-      name: CLASS_MEMBERS[Math.floor(Math.random() * CLASS_MEMBERS.length)],
-      top: Math.random() * 80 + 10,
-      duration: Math.random() * 12 + 8,
-      delay: Math.random() * 15
-    }));
-    setItems(newItems);
-  }, []);
-
-  return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 opacity-30">
-      {items.map((item) => (
-        <motion.div
-          key={item.id}
-          initial={{ x: '100vw' }}
-          animate={{ x: '-20vw' }}
-          transition={{
-            duration: item.duration,
-            repeat: Infinity,
-            ease: "linear",
-            delay: item.delay
-          }}
-          className="absolute whitespace-nowrap text-white font-black text-xl md:text-2xl tracking-widest drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]"
-          style={{ top: `${item.top}%` }}
-        >
-          {item.name}
-        </motion.div>
-      ))}
-    </div>
-  );
-};
-
 // Error Boundary Component
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, errorInfo: string | null }> {
   constructor(props: { children: ReactNode }) {
@@ -251,12 +207,15 @@ function ZhangJingyangContent({ lang, onSaveHistory, initialData }: { lang: 'zh'
   // Avatar state from Firestore
   const [avatarUrls, setAvatarUrls] = useState<string[]>([]);
   const [classPhotos, setClassPhotos] = useState<string[]>([]);
+  const [schoolLogoUrl, setSchoolLogoUrl] = useState('');
   const [currentAvatarIndex, setCurrentAvatarIndex] = useState(0);
   const [newAvatarUrl, setNewAvatarUrl] = useState('');
   const [newPhotoUrl, setNewPhotoUrl] = useState('');
+  const [newSchoolLogoUrl, setNewSchoolLogoUrl] = useState('');
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
   const settingAvatarInputRef = useRef<HTMLInputElement>(null);
   const settingPhotoInputRef = useRef<HTMLInputElement>(null);
+  const settingLogoInputRef = useRef<HTMLInputElement>(null);
 
   // Sync with Firestore
   useEffect(() => {
@@ -268,8 +227,9 @@ function ZhangJingyangContent({ lang, onSaveHistory, initialData }: { lang: 'zh'
         const data = snapshot.data();
         setAvatarUrls(data.avatarUrls || []);
         setCurrentAvatarIndex(data.currentAvatarIndex || 0);
+        setSchoolLogoUrl(data.schoolLogoUrl || '');
       } else if (isAdmin) {
-        saveSettings([], 0);
+        saveSettings([], 0, '');
       }
       setIsLoadingSettings(false);
     }, (error) => {
@@ -304,17 +264,39 @@ function ZhangJingyangContent({ lang, onSaveHistory, initialData }: { lang: 'zh'
     testConnection();
   }, []);
 
-  const saveSettings = async (urls: string[], index: number) => {
+  const saveSettings = async (urls: string[], index: number, logoUrl: string) => {
     if (!isAdmin) return;
     try {
       await setDoc(doc(db, 'settings', 'zhang_jingyang'), {
         avatarUrls: urls,
         currentAvatarIndex: index,
+        schoolLogoUrl: logoUrl,
         updatedAt: serverTimestamp(),
         updatedBy: auth.currentUser?.uid
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'settings/zhang_jingyang');
+    }
+  };
+
+  const handleUpdateSchoolLogo = () => {
+    if (isAdmin) {
+      setSchoolLogoUrl(newSchoolLogoUrl.trim());
+      saveSettings(avatarUrls, currentAvatarIndex, newSchoolLogoUrl.trim());
+      setNewSchoolLogoUrl('');
+    }
+  };
+
+  const handleLocalLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && isAdmin) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        setSchoolLogoUrl(base64);
+        saveSettings(avatarUrls, currentAvatarIndex, base64);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -325,7 +307,7 @@ function ZhangJingyangContent({ lang, onSaveHistory, initialData }: { lang: 'zh'
       setAvatarUrls(newUrls);
       setCurrentAvatarIndex(newIndex);
       setNewAvatarUrl('');
-      saveSettings(newUrls, newIndex);
+      saveSettings(newUrls, newIndex, schoolLogoUrl);
     }
   };
 
@@ -339,7 +321,7 @@ function ZhangJingyangContent({ lang, onSaveHistory, initialData }: { lang: 'zh'
         const newIndex = avatarUrls.length;
         setAvatarUrls(newUrls);
         setCurrentAvatarIndex(newIndex);
-        saveSettings(newUrls, newIndex);
+        saveSettings(newUrls, newIndex, schoolLogoUrl);
       };
       reader.readAsDataURL(file);
     }
@@ -350,7 +332,7 @@ function ZhangJingyangContent({ lang, onSaveHistory, initialData }: { lang: 'zh'
       const nextIndex = (currentAvatarIndex + 1) % avatarUrls.length;
       setCurrentAvatarIndex(nextIndex);
       if (isAdmin) {
-        saveSettings(avatarUrls, nextIndex);
+        saveSettings(avatarUrls, nextIndex, schoolLogoUrl);
       }
     }
   };
@@ -366,7 +348,7 @@ function ZhangJingyangContent({ lang, onSaveHistory, initialData }: { lang: 'zh'
     }
     setAvatarUrls(newUrls);
     setCurrentAvatarIndex(newIndex);
-    saveSettings(newUrls, newIndex);
+    saveSettings(newUrls, newIndex, schoolLogoUrl);
   };
 
   const savePhotos = async (photos: string[]) => {
@@ -769,7 +751,7 @@ function ZhangJingyangContent({ lang, onSaveHistory, initialData }: { lang: 'zh'
 
   if (isLive || liveStatus === 'connecting') {
     return (
-      <div className="flex flex-col h-full bg-[#141414] text-white overflow-hidden relative items-center justify-center">
+      <div className="flex flex-col h-full bg-transparent text-white overflow-hidden relative items-center justify-center border border-white/10">
         <div className="absolute inset-0 bg-white/5" />
         <div className="flex flex-col items-center justify-center gap-16 z-10 w-full max-w-md px-6">
           <div className="text-center space-y-4">
@@ -827,7 +809,7 @@ function ZhangJingyangContent({ lang, onSaveHistory, initialData }: { lang: 'zh'
 
   if (!isVerified) {
     return (
-      <div className="flex flex-col h-full bg-transparent text-white items-center justify-center p-6">
+      <div className="flex flex-col h-full bg-transparent text-white items-center justify-center p-6 border border-white/10 rounded-2xl">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -872,10 +854,7 @@ function ZhangJingyangContent({ lang, onSaveHistory, initialData }: { lang: 'zh'
   }
 
   return (
-    <div className="flex flex-col h-full bg-transparent text-white overflow-hidden relative">
-      {/* Danmaku Background */}
-      <Danmaku />
-
+    <div className="flex flex-col h-full bg-transparent text-white overflow-hidden relative border border-white/10 rounded-2xl">
       <div className="flex-1 overflow-y-auto p-6 pt-10 max-w-4xl mx-auto w-full flex flex-col relative z-10">
         <div className="mb-8 text-center flex flex-col items-center relative">
           <div className="absolute top-0 right-0 z-50 flex gap-2 items-center">
@@ -1073,6 +1052,64 @@ function ZhangJingyangContent({ lang, onSaveHistory, initialData }: { lang: 'zh'
 
                         <div className="space-y-2">
                           <h4 className="text-xs font-medium text-zinc-400 mb-3 uppercase tracking-wider">2021级贯通班 合照库</h4>
+                          
+                          <div className="mb-8 p-4 bg-white/5 rounded-2xl border border-white/10">
+                            <h5 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                              <ImageIcon className="w-4 h-4 text-blue-400" />
+                              信封搭扣 (校徽)
+                            </h5>
+                            <div className="flex w-full gap-2 mb-4">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                ref={settingLogoInputRef}
+                                onChange={handleLocalLogoUpload}
+                              />
+                              <button
+                                onClick={() => settingLogoInputRef.current?.click()}
+                                className="p-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg transition-colors shrink-0"
+                                title="上传校徽图片"
+                              >
+                                <ImageIcon className="w-5 h-5" />
+                              </button>
+                              <input
+                                type="text"
+                                value={newSchoolLogoUrl}
+                                onChange={(e) => setNewSchoolLogoUrl(e.target.value)}
+                                placeholder="输入校徽图片URL..."
+                                className="flex-1 bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-white/50"
+                              />
+                              <button
+                                onClick={handleUpdateSchoolLogo}
+                                disabled={!newSchoolLogoUrl.trim()}
+                                className="px-4 py-2 bg-blue-500/20 text-blue-400 rounded-lg text-sm font-medium hover:bg-blue-500/30 disabled:opacity-50 transition-colors shrink-0"
+                              >
+                                更新
+                              </button>
+                            </div>
+                            {schoolLogoUrl && (
+                              <div className="flex items-center gap-3 p-2 bg-black/20 rounded-xl border border-white/5">
+                                <div className="w-12 h-12 rounded-full overflow-hidden border border-white/10 bg-white flex items-center justify-center shrink-0">
+                                  <img src={schoolLogoUrl} alt="School Logo" className="w-10 h-10 object-contain" />
+                                </div>
+                                <div className="flex flex-col overflow-hidden">
+                                  <span className="text-xs text-zinc-400 uppercase font-bold">当前校徽</span>
+                                  <span className="text-[10px] text-zinc-500 truncate max-w-[150px]">{schoolLogoUrl.startsWith('data:') ? '本地上传' : schoolLogoUrl}</span>
+                                </div>
+                                <button 
+                                  onClick={() => {
+                                    setSchoolLogoUrl('');
+                                    saveSettings(avatarUrls, currentAvatarIndex, '');
+                                  }}
+                                  className="ml-auto p-1.5 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
                           {classPhotos.map((url, idx) => (
                             <div 
                               key={idx} 
@@ -1119,7 +1156,7 @@ function ZhangJingyangContent({ lang, onSaveHistory, initialData }: { lang: 'zh'
             )}
           </AnimatePresence>
 
-          <div className="w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden border-4 border-white/30 shadow-[0_0_30px_rgba(255,255,255,0.1)] mb-4 bg-zinc-800 flex items-center justify-center relative">
+          <div className="w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden border-4 border-white/30 shadow-[0_0_30px_rgba(255,255,255,0.2)] mb-4 bg-zinc-900 flex items-center justify-center relative">
             {currentAvatarUrl && (
               <img 
                 src={currentAvatarUrl} 
@@ -1336,6 +1373,7 @@ function ZhangJingyangContent({ lang, onSaveHistory, initialData }: { lang: 'zh'
             onClose={() => setShowGame({ ...showGame, show: false })} 
             isAdmin={isAdmin}
             classPhotos={classPhotos}
+            schoolLogoUrl={schoolLogoUrl}
             lang={lang}
           />
         )}

@@ -202,7 +202,7 @@ CRITICAL INSTRUCTIONS:
             <div className="p-1.5 bg-white/10 rounded-lg ring-1 ring-white/20">
               <MessageCircle className="w-4 h-4 text-white" />
             </div>
-            <h4 className="font-semibold text-sm text-white tracking-tight group-hover/header:text-emerald-400 transition-colors">{t.aiChat}</h4>
+            <h4 className="font-semibold text-sm text-white tracking-tight group-hover/header:text-indigo-400 transition-colors">{t.aiChat}</h4>
             {textbooks.length > 0 && (
               <span className="text-[10px] text-zinc-500 bg-white/5 px-2 py-0.5 rounded-full border border-white/5">
                 {lang === 'zh' ? `已关联 ${selectedChatTextbookIds.length} 本` : `${selectedChatTextbookIds.length} linked`}

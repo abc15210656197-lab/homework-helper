@@ -190,7 +190,7 @@ export function HistoryDrawer({ isOpen, onClose, lang, onSelectRecord, uid }: Hi
                       ) : (
                         <div className="w-16 h-16 rounded-lg shrink-0 border border-white/10 bg-zinc-900 flex items-center justify-center">
                           {record.module === 'grapher' ? (
-                            <LineChart className="w-6 h-6 text-emerald-500/50" />
+                            <LineChart className="w-6 h-6 text-indigo-500/50" />
                           ) : (
                             <ImageIcon className="w-6 h-6 text-zinc-600" />
                           )}

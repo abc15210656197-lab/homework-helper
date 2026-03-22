@@ -186,7 +186,7 @@ function LiveQnA({ imageBase64, mimeType, lang }: { imageBase64: string, mimeTyp
             <Mic className="w-10 h-10 text-white" />
           </div>
           <p className="text-sm font-medium text-zinc-300">{status}</p>
-          <button onClick={stopAll} className="px-6 py-2.5 bg-red-500/20 text-red-400 font-bold rounded-full hover:bg-red-500/30 transition-colors flex items-center gap-2 liquid-button">
+          <button onClick={stopAll} className="px-6 py-2.5 bg-white/10 text-white font-bold rounded-full hover:bg-white/20 transition-colors flex items-center gap-2 liquid-button">
             <StopCircle className="w-5 h-5" />
             {t.endLive}
           </button>
@@ -625,7 +625,7 @@ export function AudioTutorView({
             <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
               <div className="relative w-24 md:w-28 aspect-[3/4] bg-black/50 rounded-lg overflow-hidden border border-white/10 group shrink-0 shadow-xl">
                 <img src={URL.createObjectURL(files[0])} alt="Preview" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
-                <button onClick={() => setFiles([])} className="absolute top-1 right-1 p-1 bg-black/60 backdrop-blur-md text-zinc-300 rounded-full hover:bg-red-500 hover:text-white transition-all shadow-lg">
+                <button onClick={() => setFiles([])} className="absolute top-1 right-1 p-1 bg-black/60 backdrop-blur-md text-zinc-300 rounded-full hover:bg-white hover:text-black transition-all shadow-lg">
                   <Trash2 className="w-2 h-2" />
                 </button>
               </div>
@@ -644,7 +644,7 @@ export function AudioTutorView({
               </button>
             </div>
             {error && (
-              <div className="flex items-center gap-2 text-red-400 bg-red-500/10 px-4 py-2 rounded-lg border border-red-500/20">
+              <div className="flex items-center gap-2 text-white bg-white/10 px-4 py-2 rounded-lg border border-white/20">
                 <AlertCircle className="w-4 h-4" />
                 <span className="text-sm">{error}</span>
               </div>

@@ -252,7 +252,7 @@ Please listen to the audio and evaluate their pronunciation. Point out any mispr
                     <button
                       onClick={evaluatePronunciation}
                       disabled={isCorrecting}
-                      className="px-6 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-600/50 text-white font-medium transition-colors flex items-center gap-2 liquid-button-active"
+                      className="px-6 py-2 rounded-lg bg-white hover:bg-zinc-200 disabled:bg-white/50 text-black font-medium transition-colors flex items-center gap-2 liquid-button-active"
                     >
                       {isCorrecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
                       {lang === 'zh' ? '提交评估' : 'Evaluate'}
@@ -271,12 +271,12 @@ Please listen to the audio and evaluate their pronunciation. Point out any mispr
             </div>
 
             {correctionResult && (
-              <div className="bg-emerald-900/20 p-6 rounded-2xl border border-emerald-500/30 shadow-xl liquid-panel">
-                <h3 className="text-lg font-semibold text-emerald-400 mb-4 flex items-center gap-2">
+              <div className="bg-zinc-900/80 p-6 rounded-2xl border border-white/10 shadow-xl liquid-panel">
+                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                   <AlertCircle className="w-5 h-5" />
                   {lang === 'zh' ? '发音评估结果' : 'Evaluation Result'}
                 </h3>
-                <div className="prose prose-invert prose-emerald max-w-none text-sm leading-relaxed whitespace-pre-wrap">
+                <div className="prose prose-invert prose-zinc max-w-none text-sm leading-relaxed whitespace-pre-wrap">
                   {correctionResult}
                 </div>
               </div>

@@ -28,7 +28,7 @@ export function UserGuideModal({ isOpen, onClose, lang }: UserGuideModalProps) {
       ]
     },
     {
-      icon: <Headphones className="w-5 h-5 text-emerald-400" />,
+      icon: <Headphones className="w-5 h-5 text-indigo-400" />,
       title: lang === 'zh' ? '语音讲题' : 'Audio Tutor',
       details: lang === 'zh' ? [
         '上传题目：上传单张题目图片。',
@@ -135,7 +135,7 @@ export function UserGuideModal({ isOpen, onClose, lang }: UserGuideModalProps) {
         >
           <div className="flex items-center justify-between p-6 border-b border-white/10 bg-white/5 shrink-0">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
-              <BookOpen className="w-6 h-6 text-emerald-400" />
+              <BookOpen className="w-6 h-6 text-indigo-400" />
               {lang === 'zh' ? '使用指引' : 'User Guide'}
             </h2>
             <button 

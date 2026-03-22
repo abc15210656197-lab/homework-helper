@@ -581,7 +581,7 @@ export function TextbookManager({ onClose, lang, type = 'textbook', isAdmin = fa
                     <button 
                       type="button"
                       onClick={handleConfirmCreateGroup} 
-                      className="p-1 text-emerald-400 hover:bg-emerald-400/20 rounded transition-colors"
+                      className="p-1 text-indigo-400 hover:bg-indigo-400/20 rounded transition-colors"
                       title={lang === 'zh' ? '确定' : 'Confirm'}
                     >
                       <Check className="w-4 h-4" />

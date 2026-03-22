@@ -548,9 +548,9 @@ Strict output: only two top-level fields: "annotations" (array) and "summary" (o
 
   const getHighlightColor = (type: string) => {
     if (type === 'grammar') return 'bg-red-500/30';
-    if (type === 'vocabulary') return 'bg-blue-500/30';
-    if (type === 'structure') return 'bg-purple-500/30';
-    return 'bg-emerald-500/30';
+    if (type === 'vocabulary') return 'bg-zinc-500/30';
+    if (type === 'structure') return 'bg-white/20';
+    return 'bg-white/10';
   };
 
   const renderAnnotatedText = () => {
@@ -670,7 +670,7 @@ Strict output: only two top-level fields: "annotations" (array) and "summary" (o
                           value={paraAiInput}
                           onChange={(e) => setParaAiInput(e.target.value)}
                           placeholder={lang === 'zh' ? '例如：让这段话更有文学色彩，或者纠正逻辑问题...' : 'e.g., Make it more literary, or fix logical issues...'}
-                          className="w-full h-40 bg-white/5 border border-white/10 rounded-xl p-4 text-white text-sm placeholder:text-white/20 focus:ring-1 focus:ring-emerald-500/50 outline-none resize-none transition-all"
+                          className="w-full h-40 bg-white/5 border border-white/10 rounded-xl p-4 text-white text-sm placeholder:text-white/20 focus:ring-1 focus:ring-indigo-500/50 outline-none resize-none transition-all"
                         />
                       </div>
 
@@ -771,7 +771,7 @@ Strict output: only two top-level fields: "annotations" (array) and "summary" (o
               
               <div className="bg-black/40 border border-white/5 rounded-xl p-3 flex flex-col gap-1">
                 <div className="text-xs text-white/40 line-through">{paraText.substring(relativeStart, relativeEnd)}</div>
-                <div className="text-sm text-emerald-400 font-medium">{ann.suggestion}</div>
+                <div className="text-sm text-indigo-400 font-medium">{ann.suggestion}</div>
               </div>
 
               <div className="flex gap-2 mt-1">
@@ -1125,7 +1125,7 @@ ${userMessage}
             <div className="bg-white/5 border border-white/10 rounded-xl p-4">
               <div className="flex items-center justify-between mb-4 pb-4 border-b border-white/5">
                 <div className="flex items-center gap-2">
-                  <Book className={`w-5 h-5 transition-colors ${selectedMaterialIds.length > 0 || refImages.length > 0 ? 'text-emerald-400' : 'text-zinc-500'}`} />
+                  <Book className={`w-5 h-5 transition-colors ${selectedMaterialIds.length > 0 || refImages.length > 0 ? 'text-white' : 'text-zinc-500'}`} />
                   <h3 className="text-sm font-bold text-white">
                     {lang === 'zh' ? '关联资料' : 'Associated Materials'}
                   </h3>
@@ -1160,7 +1160,7 @@ ${userMessage}
                               </span>
                               <button 
                                 onClick={() => setSelectedMaterialIds(selectedMaterialIds.length === materials.length ? [] : materials.map(b => b.id))}
-                                className="text-[10px] text-blue-400 hover:text-blue-300"
+                                className="text-[10px] text-white hover:text-zinc-300"
                               >
                                 {selectedMaterialIds.length === materials.length ? (lang === 'zh' ? '取消全选' : 'Deselect All') : (lang === 'zh' ? '全选' : 'Select All')}
                               </button>
@@ -1213,7 +1213,7 @@ ${userMessage}
                                         }`}
                                       >
                                         <span className="truncate flex-1 mr-2">{book.name}</span>
-                                        {isSelected && <Check className="w-3 h-3 text-emerald-400 shrink-0" />}
+                                        {isSelected && <Check className="w-3 h-3 text-white shrink-0" />}
                                       </button>
                                     );
                                   })}
@@ -1241,7 +1241,7 @@ ${userMessage}
                                       }`}
                                     >
                                       <span className="truncate flex-1 mr-2">{book.name}</span>
-                                      {isSelected && <Check className="w-3 h-3 text-emerald-400 shrink-0" />}
+                                      {isSelected && <Check className="w-3 h-3 text-indigo-400 shrink-0" />}
                                     </button>
                                   );
                                 })}
@@ -1356,7 +1356,7 @@ ${userMessage}
             <button
               onClick={handleGrade}
               disabled={loading || (!essay.trim() && essayImages.length === 0)}
-              className="w-full py-4 bg-white text-black hover:bg-white/90 disabled:bg-white/10 disabled:text-white/40 rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+              className="w-full py-4 bg-white text-black hover:bg-zinc-200 disabled:bg-white/10 disabled:text-white/40 rounded-xl font-bold text-lg transition-all shadow-[0_0_30px_rgba(255,255,255,0.3)] flex items-center justify-center gap-2 active:scale-[0.98]"
             >
               {loading ? (
                 <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
@@ -1400,7 +1400,7 @@ ${userMessage}
                       </button>
                       <button 
                         onClick={() => setShowHistoryPanel(!showHistoryPanel)}
-                        className={`p-1.5 hover:bg-white/10 transition-colors flex items-center gap-1.5 px-3 ${showHistoryPanel ? 'bg-white/10 text-emerald-400' : 'text-white/70'}`}
+                        className={`p-1.5 hover:bg-white/10 transition-colors flex items-center gap-1.5 px-3 ${showHistoryPanel ? 'bg-white/10 text-white' : 'text-white/70'}`}
                       >
                         <History className="w-4 h-4" />
                         <span className="text-xs font-medium">{lang === 'zh' ? '历史记录' : 'History'}</span>
@@ -1425,11 +1425,11 @@ ${userMessage}
                       exit={{ height: 0, opacity: 0 }}
                       className="overflow-hidden mb-6"
                     >
-                      <div className="bg-emerald-500/10 backdrop-blur-md border border-emerald-500/30 rounded-2xl p-6 shadow-xl">
+                      <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-6 shadow-xl">
                         <div className="flex items-center justify-between mb-4">
                           <div className="flex items-center gap-2">
-                            <Clock className="w-4 h-4 text-emerald-400" />
-                            <h4 className="text-sm font-bold uppercase tracking-wider text-emerald-400">{lang === 'zh' ? '采纳记录' : 'Accepted History'}</h4>
+                            <Clock className="w-4 h-4 text-white" />
+                            <h4 className="text-sm font-bold uppercase tracking-wider text-white">{lang === 'zh' ? '采纳记录' : 'Accepted History'}</h4>
                           </div>
                           <button onClick={() => setShowHistoryPanel(false)} className="p-1 hover:bg-white/10 rounded-full text-white/40">
                             <X className="w-4 h-4" />
@@ -1447,16 +1447,16 @@ ${userMessage}
                               <button 
                                 key={item.id}
                                 onClick={() => revertHistoryItem(item.id)}
-                                className="group text-left p-4 rounded-xl bg-white/5 border border-white/5 hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-all flex flex-col gap-2"
+                                className="group text-left p-4 rounded-xl bg-white/5 border border-white/5 hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-all flex flex-col gap-2"
                               >
                                 <div className="flex items-center justify-between">
-                                  <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-tighter">
+                                  <span className="text-[10px] font-bold text-white uppercase tracking-tighter">
                                     {item.type === 'annotation' ? (lang === 'zh' ? '建议采纳' : 'Suggestion') : (lang === 'zh' ? '段落修改' : 'Para Edit')}
                                   </span>
                                   <span className="text-[10px] text-white/20">{new Date(item.timestamp).toLocaleTimeString()}</span>
                                 </div>
                                 <div className="text-sm text-white/80 font-medium line-clamp-1">{item.label}</div>
-                                <div className="text-[11px] text-white/30 flex items-center gap-1.5 mt-1 group-hover:text-emerald-400 transition-colors">
+                                <div className="text-[11px] text-white/30 flex items-center gap-1.5 mt-1 group-hover:text-white transition-colors">
                                   <Undo2 className="w-3 h-3" />
                                   {lang === 'zh' ? '点击恢复原段落' : 'Click to revert paragraph'}
                                 </div>
@@ -1473,12 +1473,12 @@ ${userMessage}
                   <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-8">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-blue-400" />
+                        <FileText className="w-4 h-4 text-white" />
                         <h4 className="text-sm font-bold uppercase tracking-wider text-white/60">{lang === 'zh' ? '题目要求' : 'Essay Prompt'}</h4>
                       </div>
                       <button 
                         onClick={cleanUpEssay}
-                        className="text-xs px-2 py-1 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded transition-colors flex items-center gap-1"
+                        className="text-xs px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded transition-colors flex items-center gap-1"
                         title={lang === 'zh' ? '从正文中移除题目要求' : 'Remove prompt from essay body'}
                       >
                         <Trash2 className="w-3 h-3" />
@@ -1518,7 +1518,7 @@ ${userMessage}
                 <div className="mt-8 bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl overflow-hidden shadow-2xl flex flex-col">
                   <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/5">
                     <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-emerald-400" />
+                      <Sparkles className="w-4 h-4 text-indigo-400" />
                       {lang === 'zh' ? '全局修改与问答' : 'Global Chat & Edit'}
                     </h3>
                     <select 
@@ -1540,7 +1540,7 @@ ${userMessage}
                     )}
                     {globalChatHistory.map((msg, i) => (
                       <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap ${msg.role === 'user' ? 'bg-emerald-500/20 text-emerald-100 rounded-tr-sm' : 'bg-white/10 text-white/90 rounded-tl-sm'}`}>
+                        <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap ${msg.role === 'user' ? 'bg-indigo-500/20 text-indigo-100 rounded-tr-sm' : 'bg-white/10 text-white/90 rounded-tl-sm'}`}>
                           {msg.text}
                         </div>
                       </div>
@@ -1566,12 +1566,12 @@ ${userMessage}
                         }
                       }}
                       placeholder={lang === 'zh' ? '输入你的要求 (按 Enter 发送)...' : 'Enter your request (Press Enter to send)...'}
-                      className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50 resize-none h-12 custom-scrollbar"
+                      className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50 resize-none h-12 custom-scrollbar"
                     />
                     <button 
                       onClick={handleGlobalChat}
                       disabled={isGlobalChatLoading || !globalChatInput.trim()}
-                      className="px-4 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center"
+                      className="px-4 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-400 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center"
                     >
                       <Sparkles className="w-5 h-5" />
                     </button>
