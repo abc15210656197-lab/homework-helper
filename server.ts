@@ -6,6 +6,8 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
+import dns from 'dns/promises';
+import net from 'net';
 
 dotenv.config();
 
@@ -116,6 +118,79 @@ async function restoreFromCloudIfNeeded(uid: string) {
 
 // Setup Multer for memory storage
 const upload = multer({ storage: multer.memoryStorage() });
+const PROXY_MAX_BYTES = 25 * 1024 * 1024;
+
+function isBlockedIp(ip: string): boolean {
+  const normalized = ip.toLowerCase();
+
+  if (normalized.startsWith('::ffff:')) {
+    return isBlockedIp(normalized.slice('::ffff:'.length));
+  }
+
+  if (net.isIP(normalized) === 4) {
+    const parts = normalized.split('.').map(Number);
+    const [a, b] = parts;
+
+    return (
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      a >= 224 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 198 && (b === 18 || b === 19))
+    );
+  }
+
+  if (net.isIP(normalized) === 6) {
+    return (
+      normalized === '::1' ||
+      normalized.startsWith('fc') ||
+      normalized.startsWith('fd') ||
+      normalized.startsWith('fe80:')
+    );
+  }
+
+  return true;
+}
+
+async function validateProxyTarget(rawUrl: string): Promise<URL> {
+  const target = new URL(rawUrl);
+
+  if (target.protocol !== 'http:' && target.protocol !== 'https:') {
+    throw new Error('Only HTTP and HTTPS URLs are allowed');
+  }
+
+  if (target.username || target.password) {
+    throw new Error('URLs with credentials are not allowed');
+  }
+
+  const hostname = target.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (
+    hostname === 'localhost' ||
+    hostname.endsWith('.localhost') ||
+    hostname.endsWith('.local') ||
+    hostname === 'metadata.google.internal'
+  ) {
+    throw new Error('Local network hosts are not allowed');
+  }
+
+  if (net.isIP(hostname)) {
+    if (isBlockedIp(hostname)) {
+      throw new Error('Private or reserved IP addresses are not allowed');
+    }
+    return target;
+  }
+
+  const addresses = await dns.lookup(hostname, { all: true, verbatim: true });
+  if (addresses.length === 0 || addresses.some(address => isBlockedIp(address.address))) {
+    throw new Error('Private or reserved IP addresses are not allowed');
+  }
+
+  return target;
+}
 
 app.use(express.json({ limit: '500mb' }));
 app.use(express.urlencoded({ limit: '500mb', extended: true }));
@@ -201,15 +276,35 @@ app.post('/api/records', async (req, res) => {
 app.get('/api/proxy', async (req, res) => {
   const url = req.query.url as string;
   if (!url) return res.status(400).send('URL required');
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
   try {
-    const response = await fetch(url);
+    const targetUrl = await validateProxyTarget(url);
+    const response = await fetch(targetUrl, {
+      redirect: 'error',
+      signal: controller.signal,
+    });
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+    const contentLength = Number(response.headers.get('content-length') || 0);
+    if (contentLength > PROXY_MAX_BYTES) {
+      return res.status(413).send('Remote file is too large');
+    }
+
     const buffer = await response.arrayBuffer();
+    if (buffer.byteLength > PROXY_MAX_BYTES) {
+      return res.status(413).send('Remote file is too large');
+    }
+
     res.set('Content-Type', response.headers.get('content-type') || 'application/octet-stream');
     res.send(Buffer.from(buffer));
   } catch (e) {
     console.error('Proxy error:', e);
     res.status(500).send('Failed to fetch URL');
+  } finally {
+    clearTimeout(timeout);
   }
 });
 
